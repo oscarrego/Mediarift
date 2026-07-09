@@ -1,0 +1,195 @@
+/* EasterEgg.module.css */
+
+/* ── Overlay ── */
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.overlayEnter {
+  animation: overlayFadeIn 0.4s ease forwards;
+}
+
+.overlayExit {
+  animation: overlayFadeOut 0.5s ease forwards;
+}
+
+@keyframes overlayFadeIn {
+  from { backdrop-filter: blur(0); background: transparent; }
+  to   { backdrop-filter: blur(4px); background: rgba(0,0,0,0.45); }
+}
+
+@keyframes overlayFadeOut {
+  from { backdrop-filter: blur(4px); background: rgba(0,0,0,0.45); }
+  to   { backdrop-filter: blur(0);   background: transparent; }
+}
+
+/* ── Card ── */
+.card {
+  position: relative;
+  background: linear-gradient(135deg, #1a1030 0%, #1e1840 50%, #231650 100%);
+  border: 1px solid rgba(155, 109, 255, 0.35);
+  border-radius: 20px;
+  padding: 36px 48px 28px;
+  text-align: center;
+  width: 360px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgba(155,109,255,0.15),
+    0 0 60px rgba(155,109,255,0.25),
+    0 24px 64px rgba(0,0,0,0.7);
+}
+
+.cardEnter {
+  animation: cardBounceIn 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.cardExit {
+  animation: cardFadeOut 0.5s ease forwards;
+}
+
+@keyframes cardBounceIn {
+  0%   { opacity: 0; transform: scale(0.6) translateY(30px); }
+  60%  { opacity: 1; transform: scale(1.04) translateY(-6px); }
+  80%  { transform: scale(0.97) translateY(2px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes cardFadeOut {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(0.85) translateY(10px); }
+}
+
+/* ── Stars / sparkles ── */
+.stars {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.star {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #fff;
+  opacity: 0;
+  animation: sparkle 2s ease-in-out infinite;
+  animation-delay: calc(var(--i) * 0.18s);
+}
+
+/* Scatter stars around the card */
+.star:nth-child(1)  { top:  8%; left:  12%; }
+.star:nth-child(2)  { top: 15%; left:  78%; }
+.star:nth-child(3)  { top: 32%; left:   5%; }
+.star:nth-child(4)  { top: 30%; left:  90%; }
+.star:nth-child(5)  { top: 60%; left:   8%; }
+.star:nth-child(6)  { top: 65%; left:  88%; }
+.star:nth-child(7)  { top: 78%; left:  18%; }
+.star:nth-child(8)  { top: 80%; left:  72%; }
+.star:nth-child(9)  { top:  5%; left:  48%; }
+.star:nth-child(10) { top: 92%; left:  42%; }
+.star:nth-child(11) { top: 45%; left:   2%; }
+.star:nth-child(12) { top: 45%; left:  95%; }
+
+@keyframes sparkle {
+  0%, 100% { opacity: 0; transform: scale(0); }
+  50%       { opacity: 1; transform: scale(1.5); }
+}
+
+/* ── Avatar ── */
+.avatarRing {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #9b6dff, #c084fc, #7c4dff);
+  padding: 3px;
+  margin: 0 auto 20px;
+  animation: avatarPulse 2s ease-in-out infinite;
+}
+
+@keyframes avatarPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(155,109,255,0.6); }
+  50%       { box-shadow: 0 0 0 12px rgba(155,109,255,0); }
+}
+
+.avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2a1a5e, #1e1040);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  font-weight: 700;
+  color: #c084fc;
+  font-family: 'Inter', sans-serif;
+  letter-spacing: -0.05em;
+}
+
+/* ── Content ── */
+.content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #c084fc;
+  background: rgba(155,109,255,0.15);
+  border: 1px solid rgba(155,109,255,0.3);
+  padding: 3px 10px;
+  border-radius: 99px;
+  margin-bottom: 4px;
+}
+
+.name {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.03em;
+  margin: 0;
+  background: linear-gradient(135deg, #fff 0%, #c084fc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.tagline {
+  font-size: 0.85rem;
+  color: rgba(255,255,255,0.55);
+  margin: 0;
+}
+
+/* ── Progress bar ── */
+.progressTrack {
+  margin-top: 24px;
+  height: 3px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: linear-gradient(90deg, #9b6dff, #c084fc);
+  border-radius: 99px;
+  animation: progressShrink 3s linear forwards;
+}
+
+@keyframes progressShrink {
+  from { width: 100%; }
+  to   { width: 0%; }
+}

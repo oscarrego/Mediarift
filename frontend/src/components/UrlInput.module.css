@@ -1,0 +1,190 @@
+/* UrlInput.module.css */
+
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* ── Input Row ── */
+.inputRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background-color: var(--color-surface);
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  transition:
+    border-color var(--dur-base) var(--ease-smooth),
+    box-shadow var(--dur-base) var(--ease-smooth),
+    background-color var(--dur-theme) var(--ease-smooth) !important;
+}
+
+.focused {
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-glow);
+}
+
+.hasError {
+  border-color: var(--color-error);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+}
+
+.leftIcon {
+  display: flex;
+  align-items: center;
+  color: var(--color-text-4);
+  flex-shrink: 0;
+}
+
+.input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: var(--text-base);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  min-width: 0;
+}
+
+.input::placeholder {
+  color: var(--color-text-4);
+}
+
+.input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ── Clear button ── */
+.clearBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  border: none;
+  background: var(--color-surface-3);
+  color: var(--color-text-4);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background-color var(--dur-base) var(--ease-smooth),
+    color var(--dur-base) var(--ease-smooth) !important;
+}
+
+.clearBtn:hover {
+  background-color: var(--color-error-bg);
+  color: var(--color-error);
+}
+
+/* ── Paste button ── */
+.pasteBtn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 5px 10px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+  color: var(--color-text-3);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  flex-shrink: 0;
+  white-space: nowrap;
+  transition:
+    background-color var(--dur-base) var(--ease-smooth),
+    color var(--dur-base) var(--ease-smooth),
+    border-color var(--dur-base) var(--ease-smooth) !important;
+}
+
+.pasteBtn:hover {
+  background-color: var(--color-accent-light);
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+/* ── Analyze button ── */
+.analyzeBtn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-5);
+  height: 40px;
+  border-radius: var(--radius-lg);
+  border: none;
+  background: linear-gradient(135deg, var(--color-gradient-from), var(--color-gradient-to));
+  color: white;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  cursor: pointer;
+  flex-shrink: 0;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+  transition:
+    opacity var(--dur-base) var(--ease-smooth),
+    box-shadow var(--dur-base) var(--ease-smooth),
+    transform var(--dur-fast) var(--ease-smooth) !important;
+}
+
+.analyzeBtn:hover:not(:disabled) {
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+  transform: translateY(-1px);
+}
+
+.analyzeBtn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.analyzeBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.analyzeBtn.loading {
+  opacity: 0.8;
+  cursor: not-allowed;
+}
+
+/* ── Spinner ── */
+.spinnerWrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.spinSvg {
+  animation: spin 0.9s linear infinite;
+}
+
+/* ── Error ── */
+.error {
+  font-size: var(--text-sm);
+  color: var(--color-error);
+  padding-left: var(--space-4);
+  animation: fadeIn 0.2s var(--ease-smooth);
+}
+
+@media (max-width: 520px) {
+  .inputRow {
+    flex-wrap: wrap;
+    padding: var(--space-3);
+    gap: var(--space-2);
+    border-radius: var(--radius-lg);
+  }
+
+  .analyzeBtn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .leftIcon {
+    display: none;
+  }
+}

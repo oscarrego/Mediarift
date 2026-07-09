@@ -1,0 +1,130 @@
+/* TopBar.module.css */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  height: var(--topbar-height);
+  background-color: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  padding: 0 10px 0 12px;
+  gap: 8px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+/* Brand */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+}
+
+.brandName {
+  font-size: 0.9rem;
+  font-weight: var(--weight-semi);
+  color: var(--color-text);
+  letter-spacing: -0.01em;
+}
+
+.brandAccent {
+  color: var(--color-accent);
+}
+
+/* Add download button — soft purple */
+.addBtn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 12px;
+  height: 26px;
+  background-color: var(--color-accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semi);
+  letter-spacing: 0.01em;
+  flex-shrink: 0;
+  transition: background-color var(--dur-fast) var(--ease-smooth),
+              opacity var(--dur-fast) var(--ease-smooth);
+}
+
+.addBtn:hover {
+  background-color: var(--color-accent-hover);
+  opacity: 0.92;
+}
+
+.addBtn:active {
+  opacity: 0.8;
+}
+
+/* Spacer */
+.spacer {
+  flex: 1;
+}
+
+/* Search */
+.searchWrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background-color: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 0 9px;
+  height: 26px;
+  width: 220px;
+  color: var(--color-text-3);
+  transition: border-color var(--dur-fast) var(--ease-smooth),
+              background-color var(--dur-fast) var(--ease-smooth);
+}
+
+.searchWrap:focus-within {
+  /* No border change on focus */
+  background-color: var(--color-surface-3);
+  color: var(--color-text-2);
+}
+
+.searchInput {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  font-size: var(--text-xs);
+  color: var(--color-text);
+  min-width: 0;
+}
+
+.searchInput::placeholder {
+  color: var(--color-text-4);
+}
+
+/* Panel toggle */
+.panelToggleWrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.panelToggleBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-2);
+  transition: background-color var(--dur-fast) var(--ease-smooth),
+              color var(--dur-fast) var(--ease-smooth);
+}
+
+.panelToggleBtn:hover {
+  background-color: var(--color-surface-3);
+  color: var(--color-text);
+}
+
+.panelToggleBtnActive {
+  background-color: var(--color-accent-light);
+  color: var(--color-accent);
+}
+

@@ -1,0 +1,129 @@
+/* DownloadProgress.module.css */
+
+.wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  animation: fadeIn 0.25s var(--ease-smooth);
+  transition:
+    background-color var(--dur-theme) var(--ease-smooth),
+    border-color var(--dur-theme) var(--ease-smooth);
+}
+
+.completed {
+  background-color: var(--color-success-bg);
+  border-color: rgba(22, 163, 74, 0.2);
+}
+
+/* ── Status icon ── */
+.iconWrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-lg);
+  background-color: var(--color-accent-light);
+  flex-shrink: 0;
+}
+
+.completed .iconWrap {
+  background-color: var(--color-success-bg);
+}
+
+.checkIcon {
+  display: flex;
+  align-items: center;
+  color: var(--color-success);
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2.5px solid var(--color-accent-ring);
+  border-top-color: var(--color-accent);
+  border-radius: var(--radius-full);
+  animation: spin 0.85s linear infinite;
+  display: block;
+}
+
+/* ── Main content ── */
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.labelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.stageLabel {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--color-text);
+}
+
+.completed .stageLabel {
+  color: var(--color-success);
+}
+
+.percentLabel {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  color: var(--color-accent);
+  font-family: var(--font-mono);
+}
+
+.completed .percentLabel {
+  color: var(--color-success);
+}
+
+/* ── Progress bar ── */
+.barTrack {
+  height: 5px;
+  background-color: var(--color-surface-3);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.barFill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-gradient-from), var(--color-gradient-to));
+  border-radius: var(--radius-full);
+  transition: width 0.4s var(--ease-smooth);
+}
+
+.barCompleted {
+  background: var(--color-success);
+}
+
+/* ── Stage dots ── */
+.dots {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-border);
+  transition: background-color var(--dur-base) var(--ease-smooth);
+}
+
+.dotActive {
+  background-color: var(--color-accent);
+}
+
+.completed .dotActive {
+  background-color: var(--color-success);
+}

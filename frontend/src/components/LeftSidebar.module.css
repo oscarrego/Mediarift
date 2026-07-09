@@ -1,0 +1,101 @@
+/* LeftSidebar.module.css — Permanent left nav sidebar */
+
+.sidebar {
+  width: 190px;
+  flex-shrink: 0;
+  background-color: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  user-select: none;
+  z-index: 10;
+}
+
+/* ── Logo ── */
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 14px;
+  height: var(--topbar-height, 40px);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.logoText {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--color-text);
+  letter-spacing: -0.01em;
+}
+
+.logoAccent {
+  color: var(--color-accent);
+}
+
+/* ── Nav Group ── */
+.navGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 8px;
+  flex: 1;
+}
+
+/* ── Nav Item ── */
+.navItem {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 7px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--color-text-3);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms ease,
+              color 120ms ease;
+  border: none;
+  background: none;
+  width: 100%;
+}
+
+.navItem:hover:not(.navItemActive) {
+  background-color: var(--color-surface-2);
+  color: var(--color-text-2);
+}
+
+.navItemActive {
+  background-color: var(--color-accent-light, rgba(108,63,255,0.1));
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.navIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.navLabel {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Left accent bar for active item */
+.activeBar {
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  background-color: var(--color-accent);
+  border-radius: 0 3px 3px 0;
+}

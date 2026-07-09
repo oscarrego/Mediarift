@@ -1,0 +1,32 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Node / frontend build output
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Application generated files
+downloads/
+temp/
+backend/temp/
+user_settings.json
+download_history.json
+
+# PyInstaller / Build
+build/
+dist/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -1,0 +1,164 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000; /* Must be above everything including floating panel */
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: fadeIn 150ms ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal {
+  width: 340px;
+  background-color: var(--color-surface-2, #202024);
+  border: 1px solid var(--color-border, #333339);
+  border-radius: var(--radius-lg, 12px);
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.65), 0 2px 8px rgba(255, 255, 255, 0.03);
+  animation: scaleIn 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.94) translateY(6px); opacity: 0; }
+  to { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--color-border-subtle, rgba(255,255,255,0.05));
+  background-color: var(--color-surface-2, #242424);
+}
+
+.title {
+  font-size: 0.85rem;
+  font-weight: var(--weight-semi, 600);
+  color: var(--color-text, #e8e8e8);
+}
+
+.closeBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: none;
+  color: var(--color-text-3, #787878);
+  cursor: pointer;
+  border-radius: var(--radius-sm, 3px);
+  transition: background-color 100ms ease, color 100ms ease;
+}
+
+.closeBtn:hover {
+  background-color: var(--color-surface-3, #2a2a2a);
+  color: var(--color-text, #e8e8e8);
+}
+
+.content {
+  padding: 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.brandRow {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  text-align: left;
+}
+
+.logoWrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  background-color: var(--color-surface-3, #2a2a30);
+  border: 1px solid var(--color-border, #3c3c45);
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.brandText {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.appName {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-text, #e8e8e8);
+  letter-spacing: -0.01em;
+}
+
+.version {
+  font-size: 0.72rem;
+  color: var(--color-text-4, #787878);
+  margin-top: 1px;
+  font-family: var(--font-mono);
+}
+
+.infoBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 8px 0;
+  background-color: var(--color-surface-3, #232328);
+  border: 1px solid var(--color-border-subtle, rgba(255, 255, 255, 0.03));
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.featuresList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.featureRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.74rem;
+  color: var(--color-text-2, #b0b0b0);
+  line-height: 1.45;
+  text-align: left;
+}
+
+.bullet {
+  color: var(--color-accent, #6c3fff);
+  font-size: 0.7rem;
+  margin-top: 1px;
+}
+
+.footer {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-top: 1px solid var(--color-border-subtle, rgba(255,255,255,0.05));
+  padding-top: 12px;
+}
+
+.devBy {
+  font-size: 0.68rem;
+  color: var(--color-text-4, #787878);
+  text-align: left;
+}
+
+.devName {
+  color: var(--color-text-2, #b0b0b0);
+  font-weight: 500;
+}

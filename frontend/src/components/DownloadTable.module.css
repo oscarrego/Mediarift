@@ -1,0 +1,347 @@
+/* DownloadTable.module.css */
+
+.tableWrap {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+/* Header row */
+.headerRow {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background-color: var(--color-surface);
+}
+
+.th {
+  padding: 0 10px;
+  height: 36px;
+  font-size: 0.85rem;
+  font-weight: var(--weight-semi);
+  color: var(--color-text-2);
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  letter-spacing: 0.02em;
+  transition: color var(--dur-fast) var(--ease-smooth);
+}
+
+.th > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* No hover on headers */
+.thActive  { color: var(--color-text) !important; }
+
+/* Column widths */
+.thCheck   { width: 64px; cursor: default; padding: 0 6px; }
+.thName    { width: 45%; min-width: 200px; }
+.thSize    { width: 80px; }
+.thStatus  { width: 120px; }
+.thPct     { width: 50px; text-align: center; }
+.thSpeed   { width: 95px; cursor: default; }
+.thDate    { width: 85px; }
+.thActions { width: 55px; cursor: default; }
+
+/* Row */
+.row {
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-smooth);
+}
+
+.rowSelected { background-color: var(--color-row-selected) !important; }
+.rowChecked  { background-color: rgba(155,109,255,0.06); }
+.rowError { background-color: rgba(224,85,85,0.04); }
+
+/* Cells */
+.table td {
+  padding: 0 10px;
+  height: 48px;
+  font-size: 0.92rem;
+  color: var(--color-text);
+  border-bottom: 1px solid var(--color-border-subtle);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+/* ── Combined checkbox + play/pause cell ── */
+.colCheck {
+  padding: 0 6px;
+  text-align: center;
+  overflow: visible;
+}
+
+/* Flex row: [checkbox] [play/pause btn] */
+.checkPlayCell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.checkbox {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  accent-color: var(--color-accent);
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.playPauseBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  color: var(--color-text-2);
+  transition: color 120ms ease, transform 80ms ease;
+}
+
+.playPauseBtn:hover {
+  transform: scale(1.15);
+  color: var(--color-accent);
+}
+
+.playPauseBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* When playing → show pause */
+.playPauseBtnPausing {
+  color: var(--color-text-3);
+}
+
+.playPauseBtnPausing:hover {
+  color: var(--color-accent);
+}
+
+/* When paused/stopped → show play */
+.playPauseBtnPlaying {
+  color: var(--color-text-3);
+}
+
+.playPauseBtnPlaying:hover {
+  color: #10b981;
+}
+
+/* Placeholder when button not applicable */
+.playPausePlaceholder {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  display: block;
+}
+
+/* Header play label */
+.headerPlayLabel {
+  font-size: 0.55rem;
+  color: var(--color-text-4);
+  opacity: 0.6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+}
+
+/* Name cell */
+.colName {
+  max-width: 0;
+}
+
+.nameCell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.fileIcon {
+  position: relative;
+  flex-shrink: 0;
+  width: 28px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fileIconLabel {
+  position: absolute;
+  bottom: 5px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 0.6rem;
+  font-weight: var(--weight-bold);
+  color: var(--fi-color, #9b6dff);
+  letter-spacing: 0.02em;
+}
+
+.nameInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.nameTitle {
+  font-size: 0.92rem;
+  font-weight: var(--weight-medium);
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nameSub {
+  font-size: 0.78rem;
+  color: var(--color-text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.colSize { color: var(--color-text-3); }
+
+/* Status cell */
+.statusCell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stateText {
+  font-size: inherit;
+  white-space: nowrap;
+  min-width: 80px;
+}
+
+.stateDownloading { color: var(--color-accent); }
+.statePaused      { color: var(--color-warning); }
+.stateCompleted   { color: var(--color-success); }
+.stateError       { color: var(--color-error); }
+.stateStopped     { color: var(--color-text-4); }
+.stateQueued      { color: var(--color-text-3); }
+.stateFetching    { color: var(--color-info); }
+
+/* Progress bar */
+.progressBarWrap {
+  flex: 1;
+  height: 4px;
+  background-color: var(--color-progress-track);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  min-width: 60px;
+  max-width: 90px;
+}
+
+.progressBar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-accent), var(--color-accent-hover));
+  border-radius: var(--radius-full);
+  transition: width 0.5s linear;
+}
+
+.progressBarPaused {
+  background: var(--color-warning);
+  animation: progressPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes progressPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.errorTip {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  color: var(--color-error);
+  background-color: var(--color-error-bg);
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.colPct { color: var(--color-text-3); font-variant-numeric: tabular-nums; text-align: center; }
+.colSpeed { font-variant-numeric: tabular-nums; color: var(--color-text-2); }
+.colDate  { color: var(--color-text-3); }
+
+/* Actions */
+.colActions { overflow: visible; }
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  justify-content: flex-end;
+}
+
+.actionBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-2);
+  transition: background-color var(--dur-fast) var(--ease-smooth),
+              color var(--dur-fast) var(--ease-smooth);
+}
+
+.actionBtn:hover {
+  background-color: var(--color-surface-3);
+  color: var(--color-text);
+}
+
+.actionBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.actionBtnFolder:hover { color: var(--color-accent); }
+.actionBtnDelete:hover { color: var(--color-error); }
+
+/* Empty state */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 60px 20px;
+  pointer-events: none;
+}
+
+.emptyIcon {
+  color: var(--color-text-4);
+}
+
+.emptyText {
+  font-size: var(--text-sm);
+  color: var(--color-text-3);
+  text-align: center;
+}
