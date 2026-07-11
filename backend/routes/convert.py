@@ -24,12 +24,10 @@ logger = logging.getLogger("ytshort.routes.convert")
 
 convert_bp = Blueprint("convert", __name__)
 
-# Valid file categories/extensions
 IMAGE_EXTS = {'.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif', '.tiff', '.tif', '.ico', '.avif', '.heic', '.heif'}
 MEDIA_EXTS = {'.mp4', '.mkv', '.avi', '.mov', '.webm', '.flv', '.wmv', '.gif', '.mp3', '.aac', '.wav', '.flac', '.ogg', '.opus', '.m4a', '.wma', '.ts', '.3gp', '.aiff'}
 DOC_EXTS = {'.pdf', '.docx', '.doc'}
 
-# Register HEIC/HEIF support via pillow-heif if available
 try:
     import pillow_heif
     pillow_heif.register_heif_opener()
@@ -129,6 +127,7 @@ def convert_file():
     
     file = request.files['file']
     to_format = request.form.get('toFormat', '').strip().lower()
+    task_id = request.form.get('taskId', '').strip()
     
     if not file or not file.filename:
         return jsonify({"error": "Empty file", "code": "EMPTY_FILE"}), 400
@@ -142,51 +141,49 @@ def convert_file():
     to_ext = f".{to_format}"
     
     if from_ext == to_ext:
-        # Same format, no-op conversion
         return jsonify({"error": "Source and target formats are the same", "code": "SAME_FORMAT"}), 400
 
-    # Ensure temp dir exists
     os.makedirs(cfg.TEMP_DIR, exist_ok=True)
     
-    # Generate unique filenames to avoid collision
     unique_id = str(uuid.uuid4())
     input_path = os.path.join(cfg.TEMP_DIR, f"{unique_id}_in{from_ext}")
     output_path = os.path.join(cfg.TEMP_DIR, f"{unique_id}_out{to_ext}")
     
     try:
-        # Save input file temporarily
         file.save(input_path)
         
-        # Decide conversion path
+        from services.ffmpeg import set_progress
         if from_ext in IMAGE_EXTS and to_ext in IMAGE_EXTS:
-            # Image conversion — Pillow fully re-encodes pixel data
+            if task_id:
+                set_progress(task_id, 20)
             logger.info("Image re-encode: %s -> %s via Pillow", from_ext, to_ext)
             img = Image.open(input_path)
-            # If target format is JPEG/BMP and original is RGBA/LA (transparent), flatten to RGB
             if to_ext in ('.jpg', '.jpeg', '.bmp') and img.mode in ('RGBA', 'LA', 'P'):
                 img = img.convert('RGB')
-            # Handle ICO saving
             if to_ext == '.ico':
                 img.save(output_path, format='ICO', sizes=[(256, 256), (128, 128), (64, 64), (32, 32), (16, 16)])
             else:
                 img.save(output_path)
+            if task_id:
+                set_progress(task_id, 100)
         
         elif from_ext in DOC_EXTS and to_ext in DOC_EXTS:
-            # Document conversion
+            if task_id:
+                set_progress(task_id, 20)
             if from_ext in ('.docx', '.doc') and to_ext == '.pdf':
                 convert_docx_to_pdf(input_path, output_path)
             elif from_ext == '.pdf' and to_ext == '.docx':
                 convert_pdf_to_docx(input_path, output_path)
             else:
                 return jsonify({"error": f"Unsupported document conversion: {from_ext} to {to_ext}", "code": "UNSUPPORTED_CONVERSION"}), 400
+            if task_id:
+                set_progress(task_id, 100)
                 
         elif from_ext in MEDIA_EXTS and to_ext in MEDIA_EXTS:
-            # Audio/Video conversion — FFmpeg full transcode with explicit codecs
             logger.info("Media transcode: %s -> %s via FFmpeg", from_ext, to_ext)
-            convert_media(input_path, output_path)
+            convert_media(input_path, output_path, task_id=task_id)
             
         else:
-            # Cross-category conversions (e.g. image → video) are not supported
             return jsonify({
                 "error": f"Cannot convert {from_ext} to {to_ext}: cross-category conversion is not supported. "
                           f"Image→Image, Audio/Video→Audio/Video, and Doc→Doc are supported.",
@@ -196,12 +193,8 @@ def convert_file():
         if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
             raise RuntimeError("Conversion produced an empty or missing output file.")
             
-        # Stream converted file back
         download_name = f"{name_part}{to_ext}"
         
-        # We need to delete the temporary files after sending the file.
-        # flask.send_file reads from memory if given a BytesIO object,
-        # which lets us delete the physical temp files on disk in the finally block.
         import io
         with open(output_path, 'rb') as f:
             file_data = io.BytesIO(f.read())
@@ -218,7 +211,6 @@ def convert_file():
         return jsonify({"error": f"Conversion failed: {str(err)}", "code": "CONVERSION_ERROR"}), 500
         
     finally:
-        # Clean up temporary files
         try:
             if os.path.exists(input_path):
                 os.remove(input_path)
@@ -226,3 +218,9 @@ def convert_file():
                 os.remove(output_path)
         except Exception as clean_err:
             logger.warning("Failed to clean up temp files: %s", clean_err)
+
+
+@convert_bp.get("/convert/progress/<task_id>")
+def convert_progress(task_id):
+    from services.ffmpeg import get_progress
+    return jsonify({"progress": get_progress(task_id)})

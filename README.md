@@ -35,6 +35,10 @@ It runs in two modes:
     *   **Images**: Flatten transparency and re-encode (JPG, PNG, WebP, BMP, GIF, ICO, AVIF, HEIC).
     *   **Audio/Video**: Transcode container formats and codecs via FFmpeg.
     *   **Documents**: Bidirectional PDF-to-Word (DOCX) and Word-to-PDF conversion (via docx2pdf / pdf2docx) with a pure Python ReportLab fallback layout engine.
+*   **Media Compressor**:
+    *   **Images**: Optimize and reduce image file sizes (JPG, PNG, WebP) utilizing quantization thresholds and quality presets.
+    *   **Videos**: Reduce video file size (MP4, MKV, AVI, MOV, WEBM) using FFmpeg via adjustable CRF (Constant Rate Factor) settings and audio bitrate constraints.
+    *   **Visual Savings Dashboard**: Track active compression jobs in real-time with progress bars and instant metrics highlighting bytes saved and percentage reductions.
 
 ---
 
@@ -43,14 +47,84 @@ It runs in two modes:
 MediaRift utilizes a decoupled client-server architecture that can also be compiled as a single binary using PyInstaller.
 
 ```mermaid
-graph TD
-    User([User Browser / Desktop Window]) -->|HTTP Requests| FlaskServer[Flask API Server]
-    FlaskServer -->|GET /api/downloads| Registry[In-Memory Registry]
-    FlaskServer -->|POST /api/download| WorkerThread[Worker Thread]
-    WorkerThread -->|Executes yt-dlp / FFmpeg| Storage[Local Disk: downloads/ & temp/]
-    WorkerThread -->|Updates state| Registry
-    FlaskServer -->|POST /api/convert| PIL_FFmpeg[Pillow / FFmpeg / Document Converters]
-    FlaskServer -->|POST /api/media-fetch| BS4[BeautifulSoup Scraper]
+graph TB
+    subgraph Client ["Client Layer (React Frontend / PyWebView Desktop)"]
+        UI["Web UI Components (App.jsx)"]
+        MC["Media Compressor UI (MediaCompressor.jsx)"]
+        FC["File Converter UI (FileConverter.jsx)"]
+        DL["Downloader UI (DownloadTable.jsx)"]
+        API["Axios / Fetch API Client (services/api.js)"]
+
+        UI --> MC
+        UI --> FC
+        UI --> DL
+        MC --> API
+        FC --> API
+        DL --> API
+    end
+
+    subgraph Backend ["Backend Layer (Flask API Server)"]
+        app["Flask Gateway (app.py)"]
+        
+        subgraph Routes ["API Endpoints (routes/)"]
+            r_info["/api/info"]
+            r_dl["/api/download(s)"]
+            r_conv["/api/convert"]
+            r_comp["/api/compress"]
+            r_fetch["/api/media-fetch"]
+        end
+
+        subgraph Services ["Service Orchestrators (services/)"]
+            dl_reg["Download Registry<br>(download_registry.py)"]
+            yt_svc["yt-dlp Wrapper<br>(youtube.py)"]
+            ff_svc["FFmpeg Service<br>(ffmpeg.py)"]
+            scrap_svc["BeautifulSoup Scraper<br>(media_fetch.py)"]
+        end
+    end
+
+    subgraph Engines ["Core Processing Engines"]
+        YTDLP["yt-dlp CLI"]
+        FFMPEG["FFmpeg / FFprobe CLI"]
+        Pillow["Pillow Engine (Python)"]
+        DocConv["docx2pdf / pdf2docx"]
+        BS4["BeautifulSoup4"]
+    end
+
+    subgraph Storage ["Storage / State Layer"]
+        InMem["In-Memory State<br>(Download Tasks Registry)"]
+        settings["user_settings.json"]
+        Disk["Local File System / Render Persistent Disk"]
+    end
+
+    %% Client to Backend routing
+    API -->|HTTP Requests| app
+    app --> r_info
+    app --> r_dl
+    app --> r_conv
+    app --> r_comp
+    app --> r_fetch
+
+    %% Backend Routes to Services
+    r_info --> yt_svc
+    r_dl --> dl_reg
+    dl_reg -->|Spawns Worker Threads| yt_svc
+    r_conv --> ff_svc
+    r_comp --> ff_svc
+    r_fetch --> scrap_svc
+
+    %% Services to Engines
+    yt_svc -->|Executes| YTDLP
+    ff_svc -->|Executes Subprocesses| FFMPEG
+    ff_svc -->|Invokes| Pillow
+    ff_svc -->|Invokes| DocConv
+    scrap_svc -->|Parses HTML| BS4
+
+    %% Services to Storage / State
+    dl_reg -->|Reads / Writes| InMem
+    r_dl -->|Queries / Controls| InMem
+    yt_svc -->|Saves Downloads| Disk
+    ff_svc -->|Read / Write Temp Files| Disk
+    app -->|Read / Write Settings| settings
 ```
 
 ### Key Architectural Details:
@@ -142,7 +216,7 @@ A `.env` file should be placed inside the `backend` folder:
 | :--- | :--- | :--- |
 | `FLASK_ENV` | Run environment (`development` / `production`). | `production` |
 | `FLASK_DEBUG` | Toggle debug output and hot reloading. | `false` |
-| `SECRET_KEY` | Flask session cryptographic signature key. | `ytshort-secret-change-me` |
+
 | `PORT` | Listening port for the Flask backend. | `5000` |
 | `CORS_ORIGINS` | Permitted cross-origin endpoints (comma-separated). | `http://localhost:5173` |
 | `FFMPEG_PATH` | Explicit absolute path to `ffmpeg` binary. | *(uses system PATH)* |
@@ -257,10 +331,38 @@ All requests must have the prefix `/api`.
 *   **Parameters**:
     *   `file`: *(Binary file payload)*
     *   `toFormat`: Target extension suffix (e.g. `png`, `mp3`, `pdf`, `docx`)
+    *   `taskId`: *(Optional)* String tracking conversion progress.
 *   **Response (200 OK)**:
     *   Streams back the raw converted file payload.
 
-### 7. App Settings
+### 7. File Conversion Progress
+*   **URL**: `/convert/progress/<task_id>`
+*   **Method**: `GET`
+*   **Response (200 OK)**:
+    ```json
+    { "progress": 45 }
+    ```
+
+### 8. Compress File
+*   **URL**: `/compress`
+*   **Method**: `POST`
+*   **Content-Type**: `multipart/form-data`
+*   **Parameters**:
+    *   `file`: *(Binary file payload)*
+    *   `level`: Compression intensity (`low` | `medium` | `high`, defaults to `medium`).
+    *   `taskId`: *(Optional)* String tracking compression progress.
+*   **Response (200 OK)**:
+    *   Streams back the raw compressed file payload.
+
+### 9. File Compression Progress
+*   **URL**: `/compress/progress/<task_id>`
+*   **Method**: `GET`
+*   **Response (200 OK)**:
+    ```json
+    { "progress": 85 }
+    ```
+
+### 10. App Settings
 *   **URL**: `/settings`
 *   **Method**: `GET` (fetch) | `POST` (update)
 *   **Body (POST)**: Partial settings patch dictionary.
@@ -269,7 +371,7 @@ All requests must have the prefix `/api`.
     { "success": true, "data": { "theme": "dark", "snail_mode": false } }
     ```
 
-### 8. Health Check
+### 11. Health Check
 *   **URL**: `/health`
 *   **Method**: `GET`
 *   **Response (200 OK)**:

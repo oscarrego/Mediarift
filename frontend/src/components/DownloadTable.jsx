@@ -387,7 +387,7 @@ export default function DownloadTable({ downloads, searchQuery, selectedId, onSe
             </svg>
           </div>
           <p className={styles.emptyText}>
-            {searchQuery ? 'No downloads match your search.' : 'No downloads yet — click Add Download to get started.'}
+            {searchQuery ? 'No downloads match your search.' : 'No downloads yet - click Add Download to get started.'}
           </p>
         </div>
       )}

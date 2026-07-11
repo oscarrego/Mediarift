@@ -20,14 +20,12 @@ async function _request(method, path, body) {
   return res.json()
 }
 
-// ── Media info ───────────────────────────────────────────────────────────────
 
 export async function fetchMediaInfo(url) {
   const res = await _request('POST', '/api/info', { url })
   return res.data
 }
 
-// ── Downloads ────────────────────────────────────────────────────────────────
 
 /**
  * Start a new download. Returns { id } immediately; progress is polled.
@@ -65,7 +63,6 @@ export async function deleteDownload(id) {
   return _request('DELETE', `/api/downloads/${id}`)
 }
 
-/** Trigger browser save-dialog for a completed download. */
 export function serveFile(id, filename) {
   const a = document.createElement('a')
   a.href = `${BASE_URL}/api/downloads/${id}/file`
@@ -80,7 +77,6 @@ export async function openFolder(id) {
   return _request('POST', `/api/downloads/${id}/open-folder`)
 }
 
-// ── Settings ─────────────────────────────────────────────────────────────────
 
 export async function getSettings() {
   const res = await _request('GET', '/api/settings')
@@ -92,14 +88,12 @@ export async function updateSettings(patch) {
   return res.data
 }
 
-// ── Health ───────────────────────────────────────────────────────────────────
 
 export async function checkHealth() {
   const res = await _request('GET', '/api/health')
   return res
 }
 
-// ── Media Fetcher ─────────────────────────────────────────────────────────────
 
 /**
  * Scrape a webpage and return all media assets found.
@@ -117,10 +111,11 @@ export async function fetchPageMedia(url) {
  * Convert an uploaded file to the target format.
  * Returns the converted file as a Blob.
  */
-export async function convertFile(file, toFormat, signal) {
+export async function convertFile(file, toFormat, taskId, signal) {
   const formData = new FormData()
   formData.append('file', file)
   formData.append('toFormat', toFormat)
+  if (taskId) formData.append('taskId', taskId)
 
   const res = await fetch(`${BASE_URL}/api/convert`, {
     method: 'POST',
@@ -136,5 +131,48 @@ export async function convertFile(file, toFormat, signal) {
 
   return res.blob()
 }
+
+/**
+ * Compress an uploaded media file (image/video).
+ * Returns the compressed file as a Blob.
+ */
+export async function compressFile(file, level, taskId, signal) {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('level', level)
+  if (taskId) formData.append('taskId', taskId)
+
+  const res = await fetch(`${BASE_URL}/api/compress`, {
+    method: 'POST',
+    body: formData,
+    signal,
+  })
+
+  if (!res.ok) {
+    let data = {}
+    try { data = await res.json() } catch {}
+    throw new Error(data.error || `Compression error: ${res.status}`)
+  }
+
+  return res.blob()
+}
+
+/** Get real-time conversion progress percentage. */
+export async function fetchConvertProgress(taskId) {
+  const res = await fetch(`${BASE_URL}/api/convert/progress/${taskId}`)
+  if (!res.ok) return 0
+  const data = await res.json()
+  return data.progress ?? 0
+}
+
+/** Get real-time compression progress percentage. */
+export async function fetchCompressProgress(taskId) {
+  const res = await fetch(`${BASE_URL}/api/compress/progress/${taskId}`)
+  if (!res.ok) return 0
+  const data = await res.json()
+  return data.progress ?? 0
+}
+
+
 
 

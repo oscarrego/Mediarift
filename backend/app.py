@@ -9,9 +9,6 @@ import time
 import socket
 import webview
 
-# ---------------------------------------------------------------------------
-# Logging
-# ---------------------------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -34,34 +31,27 @@ def create_app(config_class: type = Config) -> Flask:
     app = Flask(__name__, static_folder=frontend_dist_dir, static_url_path="")
     app.config.from_object(config_class)
 
-    # ------------------------------------------------------------------
-    # CORS – allow the Vite dev server and any configured origin
-    # ------------------------------------------------------------------
     CORS(
         app,
         resources={r"/api/*": {"origins": app.config["CORS_ORIGINS"]}},
         supports_credentials=True,
     )
 
-    # ------------------------------------------------------------------
-    # Ensure required directories exist at startup
-    # ------------------------------------------------------------------
     _ensure_directories(app)
 
-    # ------------------------------------------------------------------
-    # Register blueprints
-    # ------------------------------------------------------------------
     from routes.info import info_bp
     from routes.download import download_bp
     from routes.settings import settings_bp
     from routes.media_fetch import media_fetch_bp
     from routes.convert import convert_bp
+    from routes.compress import compress_bp
 
     app.register_blueprint(info_bp, url_prefix="/api")
     app.register_blueprint(download_bp, url_prefix="/api")
     app.register_blueprint(settings_bp, url_prefix="/api")
     app.register_blueprint(media_fetch_bp, url_prefix="/api")
     app.register_blueprint(convert_bp, url_prefix="/api")
+    app.register_blueprint(compress_bp, url_prefix="/api")
 
     # ------------------------------------------------------------------
     # Serve index.html or health-check root route
@@ -165,25 +155,19 @@ if __name__ == "__main__":
     debug = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
     
     if getattr(sys, 'frozen', False):
-        # --------------------------------------------------------------
-        # Production Desktop Window (PyWebView)
-        # --------------------------------------------------------------
         from routes.settings import load_settings, save_settings
         
-        # Load window geometry settings
         settings = load_settings()
         width = settings.get("window_width", 1280)
         height = settings.get("window_height", 720)
         x = settings.get("window_x")
         y = settings.get("window_y")
         
-        # Parse x, y coordinates safely
         try: x = int(x) if x is not None else None
         except Exception: x = None
         try: y = int(y) if y is not None else None
         except Exception: y = None
         
-        # Store temporary state for saving on exit
         window_state = {
             "width": width,
             "height": height,
@@ -199,12 +183,10 @@ if __name__ == "__main__":
             window_state["x"] = nx
             window_state["y"] = ny
             
-        # Get free port and start Flask
         port = find_free_port()
         logger.info("Starting Flask backend thread on port %d...", port)
         threading.Thread(target=run_flask_thread, args=(port,), daemon=True).start()
         
-        # Loading Splash Page (HTML data url)
         splash_html = (
             "data:text/html,<html><head><title>MediaRift</title>"
             "<style>body { background: #121214; color: white; display: flex; "
@@ -219,7 +201,6 @@ if __name__ == "__main__":
             "<h2 style='font-weight: 500;'>Loading MediaRift...</h2></div></body></html>"
         )
         
-        # Create Native Webview window
         logger.info("Creating native application window...")
         window = webview.create_window(
             title="MediaRift",
@@ -231,17 +212,13 @@ if __name__ == "__main__":
             min_size=(1024, 768)
         )
         
-        # Register geometry listeners
         window.events.resized += on_resized
         window.events.moved += on_moved
         
-        # Start health check and load thread
         threading.Thread(target=check_flask_and_load, args=(window, port), daemon=True).start()
         
-        # Block until native window is closed
         webview.start()
         
-        # Save window settings on exit
         try:
             save_settings({
                 "window_width": window_state["width"],
@@ -254,9 +231,6 @@ if __name__ == "__main__":
             logger.error("Failed to save window state: %s", e)
             
     else:
-        # --------------------------------------------------------------
-        # Development Mode
-        # --------------------------------------------------------------
         flask_app = create_app()
         port = int(os.environ.get("PORT", 5000))
         logger.info("Starting Mediarift App on port %d (debug=%s)", port, debug)

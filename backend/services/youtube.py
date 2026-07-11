@@ -21,9 +21,6 @@ from config import ActiveConfig as cfg
 
 logger = logging.getLogger("ytshort.youtube")
 
-# ---------------------------------------------------------------------------
-# Platform detection
-# ---------------------------------------------------------------------------
 PLATFORM_PATTERNS: dict[str, list[str]] = {
     "youtube": [
         r"(?:https?://)?(?:www\.)?youtube\.com/watch",
@@ -87,9 +84,6 @@ def is_supported_url(url: str) -> bool:
     return url.strip().startswith(("http://", "https://"))
 
 
-# ---------------------------------------------------------------------------
-# yt-dlp option builders
-# ---------------------------------------------------------------------------
 
 def _base_opts() -> dict[str, Any]:
     """Common yt-dlp options shared across all operations."""
@@ -125,7 +119,6 @@ def _base_opts() -> dict[str, Any]:
 
 def _extract_info(ydl_opts: dict[str, Any], url: str, download: bool = False) -> dict[str, Any]:
     """Wrapper around yt_dlp.YoutubeDL.extract_info with automatic browser cookies fallback."""
-    # First try with original options
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             return ydl.extract_info(url, download=download)
@@ -143,13 +136,9 @@ def _extract_info(ydl_opts: dict[str, Any], url: str, download: bool = False) ->
                 except Exception as e:
                     logger.debug("Failed loading cookies from browser %s: %s", browser, e)
                     continue
-        # Re-raise the exception if fallback failed or was not triggered
         raise exc
 
 
-# ---------------------------------------------------------------------------
-# Media info
-# ---------------------------------------------------------------------------
 
 def get_media_info(url: str) -> dict[str, Any]:
     """
@@ -181,24 +170,18 @@ def _parse_info(raw: dict, platform: str, url: str) -> dict[str, Any]:
     # Thumbnail: prefer the highest-resolution non-webp thumbnail when available
     thumbnail = _best_thumbnail(raw.get("thumbnails") or []) or raw.get("thumbnail", "")
 
-    # Duration
     duration_secs: int = raw.get("duration") or 0
     duration_str = _format_duration(duration_secs)
 
-    # Views
     views = raw.get("view_count")
 
-    # Upload date  e.g. "20240115"
     upload_date_raw: str = raw.get("upload_date", "")
     upload_date = _format_date(upload_date_raw)
 
-    # Formats
     formats = _parse_formats(raw.get("formats") or [])
 
-    # Best resolution label
     best_res = _best_resolution(raw.get("formats") or [])
 
-    # File size estimate from best format
     filesize = _estimate_filesize(raw.get("formats") or [])
 
     return {
@@ -297,14 +280,12 @@ def _parse_formats(formats: list[dict]) -> list[dict]:
             "tbr": f.get("tbr"),
         })
 
-    # Audio-only formats
     audio_formats = [
         f for f in formats
         if f.get("vcodec", "none") == "none"
         and f.get("acodec", "none") != "none"
         and f.get("ext") not in ("mhtml",)
     ]
-    # Best audio by abr
     audio_formats.sort(
         key=lambda f: f.get("abr") or f.get("tbr") or 0,
         reverse=True,
@@ -360,9 +341,6 @@ def _detect_video_type(platform: str, raw: dict) -> str:
     return "Video"
 
 
-# ---------------------------------------------------------------------------
-# Download
-# ---------------------------------------------------------------------------
 
 def download_media(
     url: str,
@@ -391,7 +369,6 @@ def download_media(
             return _download_audio(url, job_dir, progress_hook, speed_kbps)
         return _download_video(url, format_id, quality_label, job_dir, progress_hook, speed_kbps)
     except Exception:
-        # Cleanup on failure
         _cleanup_dir(job_dir)
         raise
 
@@ -544,7 +521,6 @@ def _download_thumbnail(url: str, job_dir: Path, thumbnail_ext: str = "jpg") -> 
             save_kwargs["quality"] = 95
         img.save(out_path, format=pil_format, **save_kwargs)
         img.close()
-        # Remove original to keep the dir clean
         try:
             source_file.unlink()
         except Exception:
@@ -572,9 +548,6 @@ def _thumb_mime(ext: str) -> str:
     }.get(ext.lower(), "image/jpeg")
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def _resolve_actual_file(expected_path: str, job_dir: Path, preferred_ext: str = ".mp4") -> str:
     """
@@ -585,7 +558,6 @@ def _resolve_actual_file(expected_path: str, job_dir: Path, preferred_ext: str =
         return expected_path
 
     stem = Path(expected_path).stem
-    # Try common extensions
     for ext in (preferred_ext, ".mp4", ".mkv", ".webm", ".mp3", ".m4a", ".opus"):
         candidate = job_dir / (stem + ext)
         if candidate.is_file():
@@ -601,13 +573,9 @@ def _resolve_actual_file(expected_path: str, job_dir: Path, preferred_ext: str =
 
 def _sanitize_filename(name: str) -> str:
     """Remove path traversal characters and keep the filename safe."""
-    # Strip directory components
     name = os.path.basename(name)
-    # Replace problematic characters
     name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name)
-    # Collapse multiple underscores/spaces
     name = re.sub(r"[_\s]{2,}", "_", name).strip("_. ")
-    # Limit length (keep extension)
     base, ext = os.path.splitext(name)
     if len(base) > 200:
         base = base[:200]

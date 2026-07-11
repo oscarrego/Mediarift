@@ -11,6 +11,7 @@ import re
 import shutil
 import logging
 import subprocess
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -18,9 +19,24 @@ from config import ActiveConfig as cfg
 
 logger = logging.getLogger("ytshort.ffmpeg")
 
-# ---------------------------------------------------------------------------
-# Binary resolution
-# ---------------------------------------------------------------------------
+_progress_lock = threading.Lock()
+_progress_store: dict[str, int] = {}
+
+def set_progress(task_id: str, percent: int) -> None:
+    if not task_id:
+        return
+    with _progress_lock:
+        _progress_store[task_id] = percent
+
+def get_progress(task_id: str) -> int:
+    with _progress_lock:
+        return _progress_store.get(task_id, 0)
+
+def clear_progress(task_id: str) -> None:
+    with _progress_lock:
+        if task_id in _progress_store:
+            del _progress_store[task_id]
+
 
 def _ffmpeg_bin() -> str:
     """Return the path to the ffmpeg binary, respecting config override."""
@@ -44,9 +60,6 @@ def _ffprobe_bin() -> str:
     raise RuntimeError("ffprobe not found. Install FFmpeg (includes ffprobe).")
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
 
 def is_ffmpeg_available() -> bool:
     """Return True if ffmpeg is callable on this system."""
@@ -123,7 +136,7 @@ def convert_to_mp3(input_path: str, output_path: str, bitrate: str = "192k") -> 
         ffmpeg,
         "-y",
         "-i", input_path,
-        "-vn",                  # no video
+        "-vn",
         "-acodec", "libmp3lame",
         "-ab", bitrate,
         "-loglevel", "error",
@@ -222,7 +235,7 @@ def _parse_fps(fps_str: str) -> Optional[float]:
         return None
 
 
-def convert_media(input_path: str, output_path: str) -> str:
+def convert_media(input_path: str, output_path: str, task_id: str = None) -> str:
     """
     Convert a video/audio file from input_path to output_path using FFmpeg.
     Uses explicit codec mappings for every supported format to ensure genuine
@@ -269,7 +282,11 @@ def convert_media(input_path: str, output_path: str) -> str:
         codec_args = AUDIO_CODEC_MAP.get(target_ext, ['-vn'])
         cmd = [ffmpeg, '-y', '-i', input_path] + codec_args + ['-loglevel', 'error', output_path]
         logger.debug("FFmpeg audio convert: %s", " ".join(cmd))
-        _run_ffmpeg(cmd)
+        total_dur = probe_duration(input_path)
+        if task_id and total_dur:
+            _run_ffmpeg_with_progress(cmd, task_id, total_dur)
+        else:
+            _run_ffmpeg(cmd)
         return output_path
 
     # ── Video output ────────────────────────────────────────────────────────
@@ -281,7 +298,11 @@ def convert_media(input_path: str, output_path: str) -> str:
         cmd = [ffmpeg, '-y', '-i', input_path, '-loglevel', 'error', output_path]
 
     logger.debug("FFmpeg video convert: %s", " ".join(cmd))
-    _run_ffmpeg(cmd)
+    total_dur = probe_duration(input_path)
+    if task_id and total_dur:
+        _run_ffmpeg_with_progress(cmd, task_id, total_dur)
+    else:
+        _run_ffmpeg(cmd)
 
     if not os.path.isfile(output_path):
         raise RuntimeError("FFmpeg produced no output file.")
@@ -304,6 +325,53 @@ def _run_ffmpeg(cmd: list) -> None:
     if result.returncode != 0:
         logger.error("FFmpeg stderr: %s", result.stderr)
         raise RuntimeError(f"FFmpeg media conversion failed: {result.stderr.strip()}")
+
+
+def _run_ffmpeg_with_progress(cmd: list, task_id: str, total_duration: float) -> None:
+    """Run FFmpeg command and parse output to update task_id progress."""
+    if not task_id or not total_duration or total_duration <= 0:
+        _run_ffmpeg(cmd)
+        return
+
+    progress_cmd = list(cmd)
+    output_file = progress_cmd.pop()
+    progress_cmd += ["-progress", "-", output_file]
+
+    try:
+        process = subprocess.Popen(
+            progress_cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+            universal_newlines=True
+        )
+
+        while True:
+            line = process.stdout.readline()
+            if not line:
+                break
+            if line.startswith("out_time_us="):
+                try:
+                    us = int(line.split("=")[1].strip())
+                    current_time = us / 1000000.0
+                    percent = int((current_time / total_duration) * 100)
+                    percent = min(99, max(0, percent))
+                    set_progress(task_id, percent)
+                except Exception:
+                    pass
+
+        process.wait(timeout=cfg.YTDLP_TIMEOUT)
+        if process.returncode != 0:
+            stderr_content = process.stderr.read()
+            logger.error("FFmpeg error: %s", stderr_content)
+            raise RuntimeError(f"FFmpeg failed with code {process.returncode}: {stderr_content.strip()}")
+
+        set_progress(task_id, 100)
+
+    except Exception as e:
+        logger.error("Error running FFmpeg with progress: %s", e)
+        raise
 
 
 def _convert_to_gif(input_path: str, output_path: str, fps: int = 15, width: int = 480) -> str:
@@ -354,4 +422,61 @@ def _convert_to_gif(input_path: str, output_path: str, fps: int = 15, width: int
         raise RuntimeError("GIF conversion produced no output file.")
 
     return output_path
+
+
+def compress_video_file(input_path: str, output_path: str, level: str, task_id: str = None) -> str:
+    ffmpeg = _ffmpeg_bin()
+    target_ext = os.path.splitext(output_path)[1].lower()
+
+    if target_ext == '.webm':
+        crf_map = {
+            'low': '24',
+            'medium': '30',
+            'high': '36'
+        }
+        crf = crf_map.get(level, '30')
+        cmd = [
+            ffmpeg,
+            '-y',
+            '-i', input_path,
+            '-c:v', 'libvpx-vp9',
+            '-crf', crf,
+            '-b:v', '0',
+            '-c:a', 'libopus',
+            '-b:a', '128k' if level != 'high' else '96k',
+            '-loglevel', 'error',
+            output_path
+        ]
+    else:
+        crf_map = {
+            'low': '20',
+            'medium': '26',
+            'high': '32'
+        }
+        crf = crf_map.get(level, '26')
+        cmd = [
+            ffmpeg,
+            '-y',
+            '-i', input_path,
+            '-c:v', 'libx264',
+            '-preset', 'medium',
+            '-crf', crf,
+            '-c:a', 'aac',
+            '-b:a', '128k' if level != 'high' else '96k',
+            '-loglevel', 'error',
+            output_path
+        ]
+
+    logger.debug("FFmpeg video compress: %s", " ".join(cmd))
+    total_dur = probe_duration(input_path)
+    if task_id and total_dur:
+        _run_ffmpeg_with_progress(cmd, task_id, total_dur)
+    else:
+        _run_ffmpeg(cmd)
+
+    if not os.path.isfile(output_path):
+        raise RuntimeError("FFmpeg compression produced no output file.")
+
+    return output_path
+
 

@@ -15,7 +15,6 @@ logger = logging.getLogger("ytshort.routes.settings")
 
 settings_bp = Blueprint("settings", __name__)
 
-# Default settings
 DEFAULT_SETTINGS = {
     "theme": "dark",
     "speed_preset": "high",        # low | medium | high | max | custom
@@ -85,7 +84,6 @@ def get_effective_speed_kbps(settings: dict | None = None) -> int:
         return int(settings.get("snail_speed_kbps", 50))
     limit = int(settings.get("speed_limit_kbps", 0))
     if limit == 0:
-        # Derive from preset
         preset = settings.get("speed_preset", "high")
         limit = SPEED_PRESETS.get(preset, 0)
     return limit

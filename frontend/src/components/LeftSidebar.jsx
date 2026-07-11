@@ -32,7 +32,14 @@ const FileConverterIcon = () => (
   </svg>
 )
 
-
+const MediaCompressorIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M4 14h6v6"/>
+    <path d="M20 10h-6V4"/>
+    <path d="M14 10l7-7"/>
+    <path d="M10 14l-7 7"/>
+  </svg>
+)
 
 const LogoIcon = () => (
   <img src={logoImg} alt="MediaRift Logo" width="22" height="22" style={{ objectFit: 'contain' }} />
@@ -42,6 +49,7 @@ const NAV_ITEMS = [
   { id: 'downloads', label: 'Download Manager', Icon: DownloadManagerIcon },
   { id: 'fetcher',   label: 'Media Fetcher',    Icon: MediaFetcherIcon },
   { id: 'converter', label: 'File Converter',   Icon: FileConverterIcon },
+  { id: 'compressor', label: 'Media Compressor', Icon: MediaCompressorIcon },
 ]
 
 export default function LeftSidebar({ activePage, onNavigate }) {

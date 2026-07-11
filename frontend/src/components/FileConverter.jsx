@@ -7,10 +7,9 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import styles from './FileConverter.module.css'
 import detailStyles from './DetailPanel.module.css'
-import { convertFile } from '../services/api'
+import { convertFile, fetchConvertProgress } from '../services/api'
 import CustomSelect from './CustomSelect'
 
-// ── Icons ─────────────────────────────────────────────────────────────────────
 
 const DownloadDoneIcon = () => (
   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -112,7 +111,6 @@ const ArrowRightIcon = () => (
   </svg>
 )
 
-// ── Conversion Options ────────────────────────────────────────────────────────
 
 const CATEGORIES = {
   image: {
@@ -197,9 +195,8 @@ function getExtension(filename) {
   return filename?.split('.').pop()?.toUpperCase() || ''
 }
 
-// ── File Item ─────────────────────────────────────────────────────────────────
 
-function FileItem({ file, toFormat, onToFormatChange, onRemove, onDownload, status, category, selected, onClick, onPlay, onPause }) {
+function FileItem({ file, toFormat, onToFormatChange, onRemove, onDownload, status, category, selected, onClick, onPlay, onPause, progressPercent }) {
   const cat = CATEGORIES[category]
   const fromExt = getExtension(file.name)
   const conversionOptions = cat.conversions.find(c => c.from === fromExt)?.to || cat.conversions[0]?.to || []
@@ -244,7 +241,7 @@ function FileItem({ file, toFormat, onToFormatChange, onRemove, onDownload, stat
           {status === 'converting' && (
             <div className={styles.statusConverting}>
               <span className={styles.convertingDot} />
-              Converting…
+              Converting ({progressPercent || 0}%)
             </div>
           )}
           {status === 'done' && (
@@ -262,7 +259,6 @@ function FileItem({ file, toFormat, onToFormatChange, onRemove, onDownload, stat
           )}
         </div>
 
-        {/* Individual File Play/Pause action buttons */}
         <div className={styles.rowControls}>
           {(status === 'idle' || status === 'error') && (
             <button
@@ -296,7 +292,6 @@ function FileItem({ file, toFormat, onToFormatChange, onRemove, onDownload, stat
   )
 }
 
-// ── Drop Zone ─────────────────────────────────────────────────────────────────
 
 function DropZone({ onFiles, accept, color, bg }) {
   const [dragging, setDragging] = useState(false)
@@ -363,7 +358,6 @@ function SquaresProgressBar({ percent }) {
   )
 }
 
-// ── Main Component ────────────────────────────────────────────────────────────
 
 export default function FileConverter({ settings, onSettingsChange, onTogglePanel, panelOpen }) {
   const [activeCategory, setActiveCategory] = useState(() => {
@@ -403,6 +397,7 @@ export default function FileConverter({ settings, onSettingsChange, onTogglePane
         file,
         toFormat: convOptions[0],
         status: 'idle',
+        progressPercent: 0,
       }
     })
     setFiles(prev => {
@@ -453,18 +448,40 @@ export default function FileConverter({ settings, onSettingsChange, onTogglePane
     const item = files.find(f => f.id === id)
     if (!item || item.status === 'converting') return
     
-    setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'converting' } : f))
+    const taskId = 'convert-' + Math.random().toString(36).slice(2, 11)
+
+    setFiles(prev => prev.map(f => f.id === id ? { 
+      ...f, 
+      status: 'converting', 
+      progressPercent: 0 
+    } : f))
     
     const controller = new AbortController()
     abortControllersRef.current[id] = controller
     
+    let intervalId = null
     try {
-      const convertedBlob = await convertFile(item.file, item.toFormat, controller.signal)
-      setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'done', blob: convertedBlob } : f))
+      intervalId = setInterval(async () => {
+        try {
+          const progress = await fetchConvertProgress(taskId)
+          setFiles(prev => prev.map(f => f.id === id ? { ...f, progressPercent: progress } : f))
+        } catch {}
+      }, 1000)
+
+      const convertedBlob = await convertFile(item.file, item.toFormat, taskId, controller.signal)
+      if (intervalId) clearInterval(intervalId)
+
+      setFiles(prev => prev.map(f => f.id === id ? { 
+        ...f, 
+        status: 'done', 
+        blob: convertedBlob,
+        progressPercent: 100 
+      } : f))
     } catch (err) {
+      if (intervalId) clearInterval(intervalId)
       if (err.name !== 'AbortError') {
         console.error('Conversion failed:', err)
-        setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'error' } : f))
+        setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'error', progressPercent: 0 } : f))
       }
     } finally {
       delete abortControllersRef.current[id]
@@ -477,7 +494,7 @@ export default function FileConverter({ settings, onSettingsChange, onTogglePane
       controller.abort()
       delete abortControllersRef.current[id]
     }
-    setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'idle' } : f))
+    setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'idle', progressPercent: 0 } : f))
   }, [])
 
   // Actual conversion using backend API
@@ -487,22 +504,43 @@ export default function FileConverter({ settings, onSettingsChange, onTogglePane
     setConverting(true)
 
     for (const item of pending) {
-      // Check if it was canceled in-between
-      const currentItem = files.find(f => f.id === item.id)
-      if (!currentItem || currentItem.status !== 'idle') continue
+            const currentItem = files.find(f => f.id === item.id)
+      if (!currentItem || (currentItem.status !== 'idle' && currentItem.status !== 'error')) continue
 
-      setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: 'converting' } : f))
+      const taskId = 'convert-' + Math.random().toString(36).slice(2, 11)
+
+      setFiles(prev => prev.map(f => f.id === item.id ? { 
+        ...f, 
+        status: 'converting', 
+        progressPercent: 0 
+      } : f))
       
       const controller = new AbortController()
       abortControllersRef.current[item.id] = controller
 
+      let intervalId = null
       try {
-        const convertedBlob = await convertFile(item.file, item.toFormat, controller.signal)
-        setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: 'done', blob: convertedBlob } : f))
+        intervalId = setInterval(async () => {
+          try {
+            const progress = await fetchConvertProgress(taskId)
+            setFiles(prev => prev.map(f => f.id === item.id ? { ...f, progressPercent: progress } : f))
+          } catch {}
+        }, 1000)
+
+        const convertedBlob = await convertFile(item.file, item.toFormat, taskId, controller.signal)
+        if (intervalId) clearInterval(intervalId)
+
+        setFiles(prev => prev.map(f => f.id === item.id ? { 
+          ...f, 
+          status: 'done', 
+          blob: convertedBlob,
+          progressPercent: 100 
+        } : f))
       } catch (err) {
+        if (intervalId) clearInterval(intervalId)
         if (err.name !== 'AbortError') {
           console.error('Conversion failed:', err)
-          setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: 'error' } : f))
+          setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: 'error', progressPercent: 0 } : f))
         }
       } finally {
         delete abortControllersRef.current[item.id]
@@ -515,11 +553,20 @@ export default function FileConverter({ settings, onSettingsChange, onTogglePane
   const readyCount = files.filter(f => f.status === 'idle' || f.status === 'error').length
   const doneCount = files.filter(f => f.status === 'done').length
 
+    const overallPercent = (() => {
+    if (files.length === 0) return 0
+    const totalProgress = files.reduce((acc, f) => {
+      if (f.status === 'done') return acc + 100
+      if (f.status === 'converting') return acc + (f.progressPercent || 0)
+      return acc
+    }, 0)
+    return Math.round(totalProgress / files.length)
+  })()
+
   return (
     <div className={`${styles.pageContainer} mr-converter-container`}>
 
-        {/* ── Header ── */}
-        <div className={`${styles.header} mr-converter-header`}>
+                <div className={`${styles.header} mr-converter-header`}>
           <div className={styles.headerCenter}>
             <div className={styles.headerIcon}>
               <ConvertIcon />
@@ -552,8 +599,7 @@ export default function FileConverter({ settings, onSettingsChange, onTogglePane
           </div>
         </div>
 
-        {/* ── Category Tabs ── */}
-        <div className={`${styles.tabs} mr-converter-tabs`}>
+                <div className={`${styles.tabs} mr-converter-tabs`}>
           {Object.entries(CATEGORIES).map(([key, info]) => (
             <button
               key={key}
@@ -570,13 +616,10 @@ export default function FileConverter({ settings, onSettingsChange, onTogglePane
           ))}
         </div>
 
-        {/* ── Body ── */}
-        <div className={`${styles.body} mr-converter-body`}>
+                <div className={`${styles.body} mr-converter-body`}>
 
-          {/* ── Left panel: Drop zone + file list ── */}
-          <div className={`${styles.mainArea} mr-converter-main`}>
+                    <div className={`${styles.mainArea} mr-converter-main`}>
 
-            {/* Drop Zone */}
             <DropZone
               onFiles={handleAddFiles}
               accept={cat.accept}
@@ -584,7 +627,6 @@ export default function FileConverter({ settings, onSettingsChange, onTogglePane
               bg={cat.bg}
             />
 
-            {/* File list */}
             {files.length > 0 && (
               <div className={styles.fileList}>
                 <div className={styles.fileListHeader}>
@@ -602,8 +644,7 @@ export default function FileConverter({ settings, onSettingsChange, onTogglePane
                       onToFormatChange={fmt => handleToFormatChange(item.id, fmt)}
                       onRemove={() => handleRemove(item.id)}
                       onDownload={() => {
-                        // Trigger browser download of the converted file blob
-                        const a = document.createElement('a')
+                                                const a = document.createElement('a')
                         a.href = URL.createObjectURL(item.blob || item.file)
                         a.download = item.file.name.replace(/\.[^.]+$/, '') + '.' + item.toFormat.toLowerCase()
                         document.body.appendChild(a)
@@ -616,6 +657,7 @@ export default function FileConverter({ settings, onSettingsChange, onTogglePane
                       onClick={() => setSelectedFileId(item.id)}
                       onPlay={() => handleConvertSingle(item.id)}
                       onPause={() => handleCancelSingle(item.id)}
+                      progressPercent={item.progressPercent}
                     />
                   ))}
                 </div>
@@ -623,10 +665,8 @@ export default function FileConverter({ settings, onSettingsChange, onTogglePane
             )}
           </div>
 
-          {/* ── Right panel: Format reference + Convert action ── */}
-          <aside className={styles.sidebar}>
+                    <aside className={styles.sidebar}>
 
-            {/* Convert action */}
             <div className={styles.sideSection}>
               <button
                 className={styles.convertBtn}
@@ -655,7 +695,6 @@ export default function FileConverter({ settings, onSettingsChange, onTogglePane
               )}
             </div>
 
-            {/* Supported formats */}
             <div className={styles.sideSection}>
               <div className={styles.sideSectionLabel}>Supported conversions</div>
               <div className={styles.formatGrid}>
@@ -676,8 +715,7 @@ export default function FileConverter({ settings, onSettingsChange, onTogglePane
           </aside>
         </div>
 
-        {/* ── Bottom: General / Progress + status bar (per-converter context) ── */}
-        <div className={detailStyles.panel}>
+                <div className={detailStyles.panel}>
           <div className={detailStyles.panelHeader}>
             <div className={detailStyles.tabs}>
               {['General', 'Progress'].map(t => (
@@ -719,12 +757,12 @@ export default function FileConverter({ settings, onSettingsChange, onTogglePane
               <div className={detailStyles.tabContent} style={{ width: '100%' }}>
                 <div className={detailStyles.progressSection}>
                   <div className={detailStyles.progressHeader}>
-                    <span className={detailStyles.progressPct}>{files.length > 0 ? Math.round((doneCount / files.length) * 100) : 0}%</span>
+                    <span className={detailStyles.progressPct}>{overallPercent}%</span>
                     <span className={detailStyles.progressOf}>
                       {doneCount} of {files.length} file{files.length !== 1 ? 's' : ''} completed
                     </span>
                   </div>
-                  <SquaresProgressBar percent={files.length > 0 ? Math.round((doneCount / files.length) * 100) : 0} />
+                  <SquaresProgressBar percent={overallPercent} />
                   <div className={detailStyles.progressStats}>
                     <div className={detailStyles.stat}>
                       <span className={detailStyles.statLabel}>Total files</span>

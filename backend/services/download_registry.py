@@ -19,10 +19,8 @@ from config import ActiveConfig as cfg
 
 logger = logging.getLogger("ytshort.download_registry")
 
-# Persist history next to user_settings.json
 _HISTORY_PATH = Path(cfg.SETTINGS_FILE).parent / "download_history.json"
 
-# ── Download states ─────────────────────────────────────────────────────────
 STATE_QUEUED     = "queued"
 STATE_FETCHING   = "fetching"   # fetching media info
 STATE_DOWNLOADING = "downloading"
@@ -49,7 +47,6 @@ def _load_history() -> None:
                 entry_id = entry.get("id")
                 if not entry_id or entry_id in _downloads:
                     continue
-                # Restore non-active entries only
                 if entry.get("state") in (STATE_COMPLETED, STATE_ERROR, STATE_STOPPED):
                     entry["_stop_event"] = threading.Event()
                     entry["_paused"] = False
@@ -75,7 +72,6 @@ def _save_history() -> None:
         logger.warning("Registry: failed to save history: %s", exc)
 
 
-# Load on module import
 _load_history()
 
 
@@ -153,7 +149,6 @@ def list_all() -> list[dict]:
         for e in _downloads.values():
             serialised = {k: v for k, v in e.items() if k not in private}
             result.append(serialised)
-    # Most-recently-added first
     result.sort(key=lambda x: x["added_at"], reverse=True)
     return result
 

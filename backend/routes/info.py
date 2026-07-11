@@ -16,9 +16,6 @@ logger = logging.getLogger("ytshort.routes.info")
 info_bp = Blueprint("info", __name__)
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def _validate_url(url: str | None) -> tuple[str | None, dict | None]:
     """
@@ -40,9 +37,6 @@ def _validate_url(url: str | None) -> tuple[str | None, dict | None]:
     return url, None
 
 
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
 
 @info_bp.post("/info")
 def fetch_info():
@@ -112,9 +106,6 @@ def health_detail():
     }), 200
 
 
-# ---------------------------------------------------------------------------
-# Error classifier
-# ---------------------------------------------------------------------------
 
 def _classify_error(msg: str) -> str:
     msg_lower = msg.lower()

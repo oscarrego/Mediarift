@@ -20,9 +20,6 @@ logger = logging.getLogger("ytshort.routes.media_fetch")
 
 media_fetch_bp = Blueprint("media_fetch", __name__)
 
-# ---------------------------------------------------------------------------
-# Extension → type mapping
-# ---------------------------------------------------------------------------
 
 IMAGE_EXTS  = {'.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tiff', '.tif', '.avif'}
 GIF_EXTS    = {'.gif'}
@@ -136,9 +133,6 @@ def _make_session(page_url: str):
     return session
 
 
-# ---------------------------------------------------------------------------
-# URL extraction helpers
-# ---------------------------------------------------------------------------
 
 def _extract_urls_from_srcset(srcset: str, base_url: str) -> list[str]:
     """Parse srcset attribute: 'url1 1x, url2 2x' → [url1, url2]"""
@@ -178,9 +172,6 @@ def _extract_urls_from_html_text(html_text: str, base_url: str) -> list[str]:
     return found
 
 
-# ---------------------------------------------------------------------------
-# Main scraping function
-# ---------------------------------------------------------------------------
 
 def scrape_media(page_url: str) -> list[dict]:
     try:
@@ -227,14 +218,12 @@ def scrape_media(page_url: str) -> list[dict]:
     soup = BeautifulSoup(html_text, 'html.parser')
     base_url = page_url
 
-    # Check for <base href>
     base_tag = soup.find('base', href=True)
     if base_tag:
         base_url = urljoin(page_url, base_tag['href'])
 
     raw_assets: list[tuple[str, str | None]] = []
 
-    # 1. <img src> and srcset
     for tag in soup.find_all('img'):
         for attr in ('src', 'data-src', 'data-lazy-src', 'data-original',
                      'data-image', 'data-lazyload', 'data-srcset'):
@@ -245,7 +234,6 @@ def scrape_media(page_url: str) -> list[dict]:
             for u in _extract_urls_from_srcset(tag['srcset'], base_url):
                 raw_assets.append((u, 'image'))
 
-    # 2. <picture><source srcset>
     for tag in soup.find_all('source'):
         parent_name = (tag.parent.name or '').lower() if tag.parent else ''
         implied = 'video' if parent_name in ('video', 'audio') else 'image'
@@ -255,7 +243,6 @@ def scrape_media(page_url: str) -> list[dict]:
             for u in _extract_urls_from_srcset(tag['srcset'], base_url):
                 raw_assets.append((u, implied))
 
-    # 3. <video src/poster> and <audio src>
     for tag in soup.find_all(['video', 'audio']):
         tag_name = tag.name.lower()
         if tag.get('src'):
@@ -265,7 +252,6 @@ def scrape_media(page_url: str) -> list[dict]:
         if tag.get('data-src'):
             raw_assets.append((urljoin(base_url, tag['data-src']), tag_name))
 
-    # 4. <link href> — favicons, apple-touch-icons, preloaded images
     for tag in soup.find_all('link', href=True):
         rel = ' '.join(tag.get('rel', [])).lower()
         href = urljoin(base_url, tag['href'])
@@ -274,12 +260,10 @@ def scrape_media(page_url: str) -> list[dict]:
         if tag.get('as') in ('image',):
             raw_assets.append((href, 'image'))
 
-    # 5. Background images in style attributes
     for tag in soup.find_all(style=True):
         for u in _extract_from_css_content(tag['style'], base_url):
             raw_assets.append((u, 'image'))
 
-    # 6. <meta> OG/Twitter image tags
     for tag in soup.find_all('meta'):
         prop = (tag.get('property', '') + tag.get('name', '')).lower()
         if 'image' in prop and tag.get('content'):
@@ -287,7 +271,6 @@ def scrape_media(page_url: str) -> list[dict]:
             if val and not val.startswith('data:'):
                 raw_assets.append((urljoin(base_url, val), 'image'))
 
-    # 7. data-bg / data-background lazy-load patterns (carousels, sliders, etc.)
     for tag in soup.find_all(True):
         for attr in ('data-bg', 'data-background', 'data-background-image',
                      'data-thumb', 'data-full', 'data-img', 'data-image-src',
@@ -296,16 +279,14 @@ def scrape_media(page_url: str) -> list[dict]:
             if val and not val.startswith('data:'):
                 raw_assets.append((urljoin(base_url, val), 'image'))
 
-    # 8. <a href> pointing directly to media files
     for tag in soup.find_all('a', href=True):
         href = tag['href']
         raw_assets.append((urljoin(base_url, href), None))
 
-    # 9. Inline <script> text — scan for image/video URLs in JSON data
     for script_tag in soup.find_all('script'):
         text = script_tag.get_text() or ''
         if len(text) > 100000:
-            continue  # skip extremely huge scripts, but allow larger than 50K for SPA hydration state
+            continue
         for u in _extract_urls_from_html_text(text, base_url):
             raw_assets.append((u, None))
 
@@ -320,19 +301,16 @@ def scrape_media(page_url: str) -> list[dict]:
         if not url or url.startswith('data:') or len(url) > 2000:
             continue
 
-        # Normalise for dedup — use URL without query/fragment
         clean = _clean_url(url)
         if clean in seen:
             continue
         seen.add(clean)
 
-        # Determine type from extension
-        path = urlparse(url).path.split('?')[0]  # strip inline query from path
+        path = urlparse(url).path.split('?')[0]
         last_seg = path.split('/')[-1]
         ext = ''
         if '.' in last_seg:
             ext = '.' + last_seg.rsplit('.', 1)[-1].lower()
-            # Skip obviously wrong extensions (too long = not a real ext)
             if len(ext) > 6:
                 ext = ''
 
@@ -425,9 +403,6 @@ def _probe_dimensions(assets: list[dict], session) -> None:
         pass  # Pillow not installed — dimensions stay None
 
 
-# ---------------------------------------------------------------------------
-# Route
-# ---------------------------------------------------------------------------
 
 @media_fetch_bp.post("/media-fetch")
 def media_fetch():

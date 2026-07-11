@@ -40,6 +40,18 @@ Key success metrics:
 *   **FR-4.1**: Users must be able to adjust app configurations such as UI theme, max concurrent downloads, rate limits, and output folder locations.
 *   **FR-4.2**: Settings must be persisted to a local JSON file (`user_settings.json`) and merge defaults automatically for missing parameters.
 
+### FR-5: Lossless Media Compressor
+*   **FR-5.1**: The system must support compressing images (JPG, PNG, WebP) and videos (MP4, MKV, AVI, MOV, WEBM) via a local Flask endpoint `/api/compress`.
+*   **FR-5.2**: The system must allow users to choose between compression intensity levels: `low` (preserves visual fidelity), `medium` (balanced quality and size reduction), and `high` (maximum size reduction).
+*   **FR-5.3**: For image compression, the system must apply format-specific optimizations:
+    *   *JPG/WebP*: Apply custom quality factor constraints (85, 70, or 55) based on level.
+    *   *PNG*: Apply color quantization (downsampling to 128 or 256 colors) or specify max compression level (compress_level=9).
+*   **FR-5.4**: For video compression, the system must invoke FFmpeg and adjust the target Constant Rate Factor (CRF) and audio bitrate:
+    *   *Standard container files (MP4, etc.)*: CRF 20 (low), 26 (medium), or 32 (high) using `libx264`.
+    *   *WebM files*: CRF 24 (low), 30 (medium), or 36 (high) using `libvpx-vp9`.
+    *   *Audio streams*: Cap audio bitrate at 128k (low/medium) or 96k (high).
+*   **FR-5.5**: The system must track compression progress and expose it in real-time via `/api/compress/progress/<task_id>`.
+
 ---
 
 ## 🔒 4. Non-Functional Requirements (NFR)
@@ -62,38 +74,39 @@ Key success metrics:
 
 MediaRift is designed to be hosted remotely on cloud platforms. The primary deployment model is a **Unified Docker Container** hosted on **Render** (or Railway). This setup packages both the React static assets and the Flask Python backend inside a single running service, avoiding complex domain settings or CORS issues.
 
-```
-                  +-----------------------------------+
-                  |             Render                |
-                  |  +-----------------------------+  |
-                  |  |      Docker Container       |  |
-                  |  |                             |  |
-User Browser ---->|  |  [Vite React App (Static)]  |  |
-                  |  |              |              |  |
-                  |  |        (API Requests)       |  |
-                  |  |              v              |  |
-                  |  |       [Flask Backend]       |  |
-                  |  |      (Python / Gunicorn)    |  |
-                  |  +-----------------------------+  |
-                  +-----------------------------------+
-                                    |
-                            (Saves downloads)
-                                    v
-                           [Persistent Disk]
-                           (Mounted to /app/downloads)
+```mermaid
+graph TB
+    subgraph Browser ["User Client Environment"]
+        UserBrowser["User Web Browser"]
+    end
+
+    subgraph RenderPlatform ["Render Cloud Platform"]
+        subgraph DockerContainer ["Unified Docker Container"]
+            ReactStatic["Vite React App (Static Files Served)"]
+            FlaskBackend["Flask Backend Service (Gunicorn WSGI)"]
+            
+            ReactStatic -->|API Requests| FlaskBackend
+        end
+        
+        PersistentDisk["Persistent Disk Storage (Mounted to /app/downloads)"]
+        FlaskBackend -->|Saves Media & Reads Downloads| PersistentDisk
+    end
+
+    UserBrowser -->|HTTP GET (Loads Site)| ReactStatic
+    UserBrowser -->|HTTP POST/GET (API Endpoint Requests)| FlaskBackend
 ```
 
 ### 5.1 Deployment Architecture
 1.  **Container Base**: `python:3.11-slim` ensures a lightweight operating system footprint.
-2.  **System Binaries**: The Docker container installs `ffmpeg` and `curl` via `apt-get` at build time. This ensures media merging and conversion functions work out-of-the-box in the cloud.
+2.  **System Binaries**: The Docker container installs `ffmpeg` and `curl` via `apt-get` at build time. This ensures media merging, conversion, and compression functions work out-of-the-box in the cloud.
 3.  **Client Hosting**: A multi-stage Docker build compiles the Vite frontend into static files (`frontend/dist`). The Flask application serves these static files directly from the root path (`/`).
 4.  **Process Manager**: Gunicorn is used as a production-grade WSGI HTTP Server to manage Flask processes with multiple concurrent worker threads.
 
 ### 5.2 Required Cloud Services
 To host the application independently, the following configurations are required:
 
-*   **Hosting Service**: Render Web Service (Starter tier or higher, as FFmpeg transcoding can be CPU/memory intensive).
-*   **Memory Limit**: Minimum **512MB RAM** (1GB RAM recommended for converting large video files).
+*   **Hosting Service**: Render Web Service (Starter tier or higher, as FFmpeg media transcoding and compression is CPU and memory intensive).
+*   **Memory Limit**: Minimum **512MB RAM** (1GB RAM recommended to ensure stable compression of large video/media files without triggering OOM events).
 *   **Disk Storage**: Render containers have ephemeral disks. To prevent downloaded media files from being lost when the container restarts (e.g., during a deployment or daily maintenance), a **Persistent Disk** (1GB to 10GB) must be attached:
     *   **Mount Path**: `/app/downloads`
 *   **Environment Configuration**: Env variables defined below must be configured in the Render Dashboard.

@@ -21,6 +21,7 @@ import BugReportModal from './components/BugReportModal'
 import RightPanel     from './components/RightPanel'
 import MediaFetcher   from './components/MediaFetcher'
 import FileConverter  from './components/FileConverter'
+import MediaCompressor from './components/MediaCompressor'
 import AboutModal     from './components/AboutModal'
 
 import { listDownloads, getSettings, updateSettings, startDownload } from './services/api'
@@ -46,18 +47,15 @@ const DEFAULT_SETTINGS = {
 }
 
 export default function App() {
-  // ── Loading ────────────────────────────────────────────────────────────────
-  const [appReady, setAppReady] = useState(() => {
+    const [appReady, setAppReady] = useState(() => {
     return sessionStorage.getItem('mediarift_loading_shown') === 'true'
   })
 
-  // ── Theme ──────────────────────────────────────────────────────────────────
-  const { resolved, setTheme } = useTheme()
+    const { resolved, setTheme } = useTheme()
 
-  // ── Active page ────────────────────────────────────────────────────────────
-  const [activePage, setActivePage] = useState(() => {
+    const [activePage, setActivePage] = useState(() => {
     const hash = window.location.hash.slice(1)
-    if (['downloads', 'fetcher', 'converter'].includes(hash)) {
+    if (['downloads', 'fetcher', 'converter', 'compressor'].includes(hash)) {
       return hash
     }
     return localStorage.getItem('mediarift_active_page') || 'downloads'
@@ -67,7 +65,7 @@ export default function App() {
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.slice(1)
-      if (['downloads', 'fetcher', 'converter'].includes(hash)) {
+      if (['downloads', 'fetcher', 'converter', 'compressor'].includes(hash)) {
         setActivePage(hash)
         localStorage.setItem('mediarift_active_page', hash)
       }
@@ -75,7 +73,6 @@ export default function App() {
 
     window.addEventListener('hashchange', handleHashChange)
     
-    // Set initial hash if none exists
     const currentHash = window.location.hash.slice(1)
     if (!currentHash) {
       window.location.hash = activePage
@@ -86,17 +83,14 @@ export default function App() {
     return () => window.removeEventListener('hashchange', handleHashChange)
   }, [activePage])
 
-  // ── Downloads ──────────────────────────────────────────────────────────────
-  const [downloads, setDownloads]   = useState([])
+    const [downloads, setDownloads]   = useState([])
   const [manualSelectedId, setManualSelectedId] = useState(null)
   const [filter, setFilter]         = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
 
-  // ── Settings ───────────────────────────────────────────────────────────────
-  const [settings, setSettings] = useState(DEFAULT_SETTINGS)
+    const [settings, setSettings] = useState(DEFAULT_SETTINGS)
 
-  // ── Font size (fixed at 15px, no longer user-adjustable) ──────────────────
-  const [fontSize, setFontSizeState] = useState(15)
+    const [fontSize, setFontSizeState] = useState(15)
 
   useEffect(() => {
     // Font size is fixed at 15px via index.css — no dynamic override needed
@@ -107,15 +101,13 @@ export default function App() {
     setFontSizeState(clamped)
   }, [])
 
-  // ── Modal states ───────────────────────────────────────────────────────────
-  const [downloadModalOpen, setDownloadModalOpen] = useState(false)
+    const [downloadModalOpen, setDownloadModalOpen] = useState(false)
   const [rightPanelOpen, setRightPanelOpen]       = useState(false)
   const [prefsOpen, setPrefsOpen]                 = useState(false)
   const [bugReportOpen, setBugReportOpen]         = useState(false)
   const [aboutOpen, setAboutOpen]                 = useState(false)
 
-  // ── Load settings ──────────────────────────────────────────────────────────
-  useEffect(() => {
+    useEffect(() => {
     getSettings()
       .then(s => {
         const merged = { ...DEFAULT_SETTINGS, ...s }
@@ -126,8 +118,7 @@ export default function App() {
       .catch(() => {})
   }, []) // eslint-disable-line
 
-  // ── Poll downloads ─────────────────────────────────────────────────────────
-  const pollRef = useRef(null)
+    const pollRef = useRef(null)
 
   const fetchDownloads = useCallback(async () => {
     try {
@@ -142,8 +133,7 @@ export default function App() {
     return () => clearInterval(pollRef.current)
   }, [fetchDownloads])
 
-  // ── Settings change ────────────────────────────────────────────────────────
-  const handleSettingsChange = useCallback(async (patch) => {
+    const handleSettingsChange = useCallback(async (patch) => {
     const merged = { ...settings, ...patch }
     setSettings(merged)
     if (patch.theme) setTheme(patch.theme)
@@ -163,8 +153,7 @@ export default function App() {
     }, 400)
   }, [setFontSize])
 
-  // ── Start download ─────────────────────────────────────────────────────────
-  const handleStartDownload = useCallback(async (params) => {
+    const handleStartDownload = useCallback(async (params) => {
     try {
       await startDownload(params)
       fetchDownloads()
@@ -173,8 +162,7 @@ export default function App() {
     }
   }, [fetchDownloads])
 
-  // ── Filter downloads ───────────────────────────────────────────────────────
-  const filteredDownloads = downloads.filter(d => {
+    const filteredDownloads = downloads.filter(d => {
     if (filter === 'all')         return true
     if (filter === 'downloading') return ['downloading','paused','queued','fetching'].includes(d.state)
     if (filter === 'completed')   return d.state === 'completed'
@@ -182,8 +170,7 @@ export default function App() {
     return true
   })
 
-  // ── Auto-select logic ──────────────────────────────────────────────────────
-  const effectiveSelectedId = (() => {
+    const effectiveSelectedId = (() => {
     if (manualSelectedId && downloads.some(d => d.id === manualSelectedId)) {
       return manualSelectedId
     }
@@ -225,8 +212,7 @@ export default function App() {
 
   return (
     <>
-      {/* ── Loading Screen ── */}
-      {!appReady && (
+            {!appReady && (
         <LoadingScreen
           onDone={() => {
             sessionStorage.setItem('mediarift_loading_shown', 'true')
@@ -237,14 +223,11 @@ export default function App() {
 
       <div className={`${styles.app} mr-app-root`} data-theme={resolved}>
 
-        {/* ── Left Sidebar ── */}
-        <LeftSidebar activePage={activePage} onNavigate={handleNavigate} />
+                <LeftSidebar activePage={activePage} onNavigate={handleNavigate} />
 
-        {/* ── Main content area — never shifts for right panel ── */}
-        <div className={`${styles.mainContent} mr-main-content`}>
+                <div className={`${styles.mainContent} mr-main-content`}>
 
-          {/* ── Download Manager page ── */}
-          {activePage === 'downloads' && (
+                    {activePage === 'downloads' && (
             <>
               <TopBar
                 onAddDownload={() => setDownloadModalOpen(true)}
@@ -280,8 +263,7 @@ export default function App() {
             </>
           )}
 
-          {/* ── Media Fetcher page ── */}
-          {activePage === 'fetcher' && (
+                    {activePage === 'fetcher' && (
             <MediaFetcher
               settings={settings}
               onSettingsChange={handleSettingsChange}
@@ -290,9 +272,17 @@ export default function App() {
             />
           )}
 
-          {/* ── File Converter page ── */}
-          {activePage === 'converter' && (
+                    {activePage === 'converter' && (
             <FileConverter
+              settings={settings}
+              onSettingsChange={handleSettingsChange}
+              onTogglePanel={() => setRightPanelOpen(v => !v)}
+              panelOpen={rightPanelOpen}
+            />
+          )}
+
+                    {activePage === 'compressor' && (
+            <MediaCompressor
               settings={settings}
               onSettingsChange={handleSettingsChange}
               onTogglePanel={() => setRightPanelOpen(v => !v)}
@@ -301,8 +291,7 @@ export default function App() {
           )}
         </div>
 
-        {/* ── Right nav panel — floats over content ── */}
-        <RightPanel
+                <RightPanel
           open={rightPanelOpen}
           onClose={() => setRightPanelOpen(false)}
           onBugReport={() => { setRightPanelOpen(false); setBugReportOpen(true) }}
@@ -312,8 +301,7 @@ export default function App() {
           onAbout={() => setAboutOpen(true)}
         />
 
-        {/* ── Modals ── */}
-        {downloadModalOpen && (
+                {downloadModalOpen && (
           <UrlPasteModal
             onClose={() => setDownloadModalOpen(false)}
             onStartDownload={handleStartDownload}
@@ -340,8 +328,7 @@ export default function App() {
           />
         )}
 
-        {/* ── Easter Egg ── listens globally for /oscar */}
-        <EasterEgg />
+                <EasterEgg />
       </div>
     </>
   )

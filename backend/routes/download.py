@@ -29,9 +29,6 @@ logger = logging.getLogger("ytshort.routes.download")
 download_bp = Blueprint("download", __name__)
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def _classify_error(msg: str) -> str:
     m = msg.lower()
@@ -136,9 +133,6 @@ def _run_download(entry_id: str, url: str, format_id: str, download_type: str,
             registry.update(entry_id, state=registry.STATE_ERROR, error=msg, speed_bps=0)
 
 
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
 
 @download_bp.post("/download")
 def start_download():
@@ -166,7 +160,6 @@ def start_download():
     settings = load_settings()
     speed_kbps = get_effective_speed_kbps(settings)
 
-    # Create registry entry early so the UI can show it immediately
     entry_id = registry.create_entry(
         url=url,
         platform=platform,
@@ -184,7 +177,6 @@ def start_download():
     except Exception:
         pass  # title stays as URL — not fatal
 
-    # Fire and forget
     t = threading.Thread(
         target=_run_download,
         args=(entry_id, url, format_id, download_type, quality_label, thumbnail_ext, speed_kbps),

@@ -17,23 +17,13 @@ BASE_DIR = Path(__file__).parent.resolve()
 
 
 class Config:
-    # ------------------------------------------------------------------
-    # App
-    # ------------------------------------------------------------------
     APP_VERSION: str = "1.0.0"
     ENV: str = os.getenv("FLASK_ENV", "production")
     SECRET_KEY: str = os.getenv("SECRET_KEY", "ytshort-secret-change-me-in-production")
 
-    # ------------------------------------------------------------------
-    # CORS
-    # ------------------------------------------------------------------
-    # Comma-separated list of allowed origins, e.g. "http://localhost:5173,https://yourdomain.com"
     _cors_raw: str = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
     CORS_ORIGINS: list[str] = [o.strip() for o in _cors_raw.split(",") if o.strip()]
 
-    # ------------------------------------------------------------------
-    # Filesystem
-    # ------------------------------------------------------------------
     DOWNLOADS_DIR: str = str(APP_DIR / "downloads")
     TEMP_DIR: str = str(APP_DIR / "temp")
 
@@ -42,13 +32,8 @@ class Config:
     # soft guard for the temp directory).
     MAX_DOWNLOAD_SIZE: int = int(os.getenv("MAX_DOWNLOAD_SIZE", str(4 * 1024 ** 3)))
 
-    # Seconds before yt-dlp subprocess is forcibly killed
     YTDLP_TIMEOUT: int = int(os.getenv("YTDLP_TIMEOUT", "600"))
 
-    # ------------------------------------------------------------------
-    # FFmpeg
-    # ------------------------------------------------------------------
-    # Absolute path to ffmpeg binary; leave empty to rely on system PATH
     _bundled_ffmpeg = ""
     _bundled_ffprobe = ""
     if getattr(sys, 'frozen', False):
@@ -63,26 +48,16 @@ class Config:
     FFMPEG_PATH: str = os.getenv("FFMPEG_PATH", _bundled_ffmpeg)
     FFPROBE_PATH: str = os.getenv("FFPROBE_PATH", _bundled_ffprobe)
 
-    # ------------------------------------------------------------------
-    # yt-dlp tweaks
-    # ------------------------------------------------------------------
-    # Additional yt-dlp cookies file path (optional)
     COOKIES_FILE: str = os.getenv("COOKIES_FILE", "")
 
-    # Proxy to use for yt-dlp requests (optional), e.g. "socks5://127.0.0.1:1080"
     PROXY: str = os.getenv("PROXY", "")
 
-    # ------------------------------------------------------------------
-    # Download history / temp file retention
-    # ------------------------------------------------------------------
     # How long (seconds) to keep temp files after a completed download
     # before the cleanup sweep removes them.  Default: 1 hour.
     TEMP_FILE_TTL: int = int(os.getenv("TEMP_FILE_TTL", "3600"))
 
-    # User-facing settings persisted as JSON
     SETTINGS_FILE: str = str(APP_DIR / "user_settings.json")
 
-    # Maximum simultaneous downloads (default, overridable by user settings)
     MAX_CONCURRENT_DOWNLOADS: int = int(os.getenv("MAX_CONCURRENT_DOWNLOADS", "3"))
 
 
