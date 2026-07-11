@@ -2,17 +2,6 @@
 
 MediaRift is a high-performance, private, self-hosted media utility suite. It provides a unified web interface and native desktop window wrapping (via PyWebView) to scrape webpages for media, download video and audio from 1000+ supported websites, and perform lossless transcoding for images, audio, video, and documents.
 
----
-
-## 📖 Table of Contents
-1. [Project Overview](#-project-overview)
-2. [Key Features](#-key-features)
-3. [Architecture & Flow](#-architecture--flow)
-4. [Tech Stack](#-tech-stack)
-5. [Setup & Installation](#-setup--installation)
-6. [Environment Variables](#-environment-variables)
-7. [API Reference](#-api-reference)
-8. [Live Deployment](#-live-deployment)
 
 ---
 
