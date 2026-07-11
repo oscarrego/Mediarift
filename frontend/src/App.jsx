@@ -24,7 +24,7 @@ import FileConverter  from './components/FileConverter'
 import MediaCompressor from './components/MediaCompressor'
 import AboutModal     from './components/AboutModal'
 
-import { listDownloads, getSettings, updateSettings, startDownload } from './services/api'
+import { listDownloads, getSettings, updateSettings, startDownload, detectClipboard } from './services/api'
 import { useTheme } from './hooks/useTheme'
 import EasterEgg from './components/EasterEgg'
 
@@ -44,6 +44,24 @@ const DEFAULT_SETTINGS = {
   auto_remove_completed: false,
   auto_retry_failed: false,
   font_size: 13,
+
+  // Preset limits
+  preset_low_speed_kbps: 256,
+  preset_medium_speed_kbps: 2048,
+  preset_high_speed_kbps: 0,
+  preset_max_speed_kbps: 0,
+  preset_low_max_conn: 15,
+  preset_medium_max_conn: 50,
+  preset_high_max_conn: 200,
+  preset_max_max_conn: 200,
+  preset_low_server_conn: 5,
+  preset_medium_server_conn: 8,
+  preset_high_server_conn: 15,
+  preset_max_server_conn: 15,
+  preset_low_max_downloads: 2,
+  preset_medium_max_downloads: 3,
+  preset_high_max_downloads: 4,
+  preset_max_max_downloads: 0,
 }
 
 export default function App() {
@@ -106,8 +124,28 @@ export default function App() {
   const [prefsOpen, setPrefsOpen]                 = useState(false)
   const [bugReportOpen, setBugReportOpen]         = useState(false)
   const [aboutOpen, setAboutOpen]                 = useState(false)
+  const [clipboardToastUrl, setClipboardToastUrl] = useState(null)
+  const lastCheckedUrlRef = useRef('')
 
-    useEffect(() => {
+  useEffect(() => {
+    if (!settings.enable_clipboard_monitoring) return
+
+    const intervalMs = (settings.clipboard_monitoring_interval || 2) * 1000
+    const interval = setInterval(async () => {
+      try {
+        const res = await detectClipboard(lastCheckedUrlRef.current)
+        if (res.detected && res.url && res.url !== lastCheckedUrlRef.current) {
+          setClipboardToastUrl(res.url)
+        }
+      } catch (err) {
+        console.error('Clipboard check failed:', err)
+      }
+    }, intervalMs)
+
+    return () => clearInterval(interval)
+  }, [settings.enable_clipboard_monitoring, settings.clipboard_monitoring_interval])
+
+  useEffect(() => {
     getSettings()
       .then(s => {
         const merged = { ...DEFAULT_SETTINGS, ...s }
@@ -303,9 +341,13 @@ export default function App() {
 
                 {downloadModalOpen && (
           <UrlPasteModal
-            onClose={() => setDownloadModalOpen(false)}
+            onClose={() => {
+              setDownloadModalOpen(false)
+              setClipboardToastUrl(null)
+            }}
             onStartDownload={handleStartDownload}
             defaultSaveTo={settings.download_folder}
+            initialUrl={clipboardToastUrl}
           />
         )}
         {prefsOpen && (
@@ -328,7 +370,38 @@ export default function App() {
           />
         )}
 
-                <EasterEgg />
+        <EasterEgg />
+
+        {clipboardToastUrl && (
+          <div className={styles.clipboardToast} id="clipboard-toast">
+            <div className={styles.toastContent}>
+              <span className={styles.toastMessage}>Link detected in clipboard:</span>
+              <span className={styles.toastUrl} title={clipboardToastUrl}>{clipboardToastUrl}</span>
+            </div>
+            <div className={styles.toastActions}>
+              <button
+                className={styles.toastAddBtn}
+                onClick={() => {
+                  lastCheckedUrlRef.current = clipboardToastUrl
+                  setDownloadModalOpen(true)
+                }}
+                id="clipboard-toast-download"
+              >
+                Download
+              </button>
+              <button
+                className={styles.toastDismissBtn}
+                onClick={() => {
+                  lastCheckedUrlRef.current = clipboardToastUrl
+                  setClipboardToastUrl(null)
+                }}
+                id="clipboard-toast-dismiss"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </>
   )

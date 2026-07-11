@@ -15,7 +15,7 @@ from pathlib import Path
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 
-logger = logging.getLogger("ytshort.database")
+logger = logging.getLogger("mediarift.database")
 
 # ---------------------------------------------------------------------------
 # Database Location Selection
@@ -70,6 +70,22 @@ def init_db() -> None:
                 window_height INTEGER DEFAULT 720,
                 window_x INTEGER,
                 window_y INTEGER,
+                preset_low_speed_kbps INTEGER DEFAULT 256,
+                preset_medium_speed_kbps INTEGER DEFAULT 2048,
+                preset_high_speed_kbps INTEGER DEFAULT 0,
+                preset_max_speed_kbps INTEGER DEFAULT 0,
+                preset_low_max_conn INTEGER DEFAULT 15,
+                preset_medium_max_conn INTEGER DEFAULT 50,
+                preset_high_max_conn INTEGER DEFAULT 200,
+                preset_max_max_conn INTEGER DEFAULT 200,
+                preset_low_server_conn INTEGER DEFAULT 5,
+                preset_medium_server_conn INTEGER DEFAULT 8,
+                preset_high_server_conn INTEGER DEFAULT 15,
+                preset_max_server_conn INTEGER DEFAULT 15,
+                preset_low_max_downloads INTEGER DEFAULT 2,
+                preset_medium_max_downloads INTEGER DEFAULT 3,
+                preset_high_max_downloads INTEGER DEFAULT 4,
+                preset_max_max_downloads INTEGER DEFAULT 0,
                 updated_at TEXT
             );
             """)
@@ -156,6 +172,9 @@ def init_db() -> None:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_conversions_created_at ON conversions(created_at);")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_compressions_created_at ON compressions(created_at);")
             
+            # Run schema migrations to add any missing columns
+            _migrate_database_schema(conn)
+            
             conn.commit()
             logger.info("Database schemas and indexes initialized successfully.")
         except Exception as e:
@@ -168,6 +187,97 @@ def init_db() -> None:
     # Trigger migrations and recover unfinished downloads on startup
     _migrate_json_files()
     _recover_unfinished_downloads()
+
+
+def _migrate_database_schema(conn) -> None:
+    """Dynamically add new columns to settings, downloads, and compressions tables if missing."""
+    cursor = conn.cursor()
+    
+    # 1. Migrate settings table
+    cursor.execute("PRAGMA table_info(settings);")
+    existing_settings_cols = {row[1] for row in cursor.fetchall()}
+    
+    new_settings_cols = {
+        "max_retries": "INTEGER DEFAULT 3",
+        "clipboard_detection": "INTEGER DEFAULT 0",
+        "auto_open_download_dialog": "INTEGER DEFAULT 1",
+        "resume_interrupted_downloads": "INTEGER DEFAULT 1",
+        "auto_download_subtitles": "INTEGER DEFAULT 0",
+        "subtitle_format": "TEXT DEFAULT 'srt'",
+        "subtitle_languages": "TEXT DEFAULT 'en'",
+        "preferred_gpu_encoder": "TEXT DEFAULT 'auto'",
+        "compression_preset": "TEXT DEFAULT 'balanced'",
+        "image_optimization_level": "TEXT DEFAULT 'high'",
+        "video_optimization_level": "TEXT DEFAULT 'balanced'",
+        "audio_quality": "TEXT DEFAULT 'high'",
+        "use_max_quality_algorithms": "INTEGER DEFAULT 0",
+        "preset_low_speed_kbps": "INTEGER DEFAULT 256",
+        "preset_medium_speed_kbps": "INTEGER DEFAULT 2048",
+        "preset_high_speed_kbps": "INTEGER DEFAULT 0",
+        "preset_max_speed_kbps": "INTEGER DEFAULT 0",
+        "preset_low_max_conn": "INTEGER DEFAULT 15",
+        "preset_medium_max_conn": "INTEGER DEFAULT 50",
+        "preset_high_max_conn": "INTEGER DEFAULT 200",
+        "preset_max_max_conn": "INTEGER DEFAULT 200",
+        "preset_low_server_conn": "INTEGER DEFAULT 5",
+        "preset_medium_server_conn": "INTEGER DEFAULT 8",
+        "preset_high_server_conn": "INTEGER DEFAULT 15",
+        "preset_max_server_conn": "INTEGER DEFAULT 15",
+        "preset_low_max_downloads": "INTEGER DEFAULT 2",
+        "preset_medium_max_downloads": "INTEGER DEFAULT 3",
+        "preset_high_max_downloads": "INTEGER DEFAULT 4",
+        "preset_max_max_downloads": "INTEGER DEFAULT 0"
+    }
+    
+    for col, definition in new_settings_cols.items():
+        if col not in existing_settings_cols:
+            sql = f"ALTER TABLE settings ADD COLUMN {col} {definition}"
+            logger.info("Migrating settings table: adding column '%s'", col)
+            try:
+                conn.execute(sql)
+            except Exception as e:
+                logger.error("Failed to migrate column %s in settings table: %s", col, e)
+                
+    # 2. Migrate downloads table
+    cursor.execute("PRAGMA table_info(downloads);")
+    existing_downloads_cols = {row[1] for row in cursor.fetchall()}
+    
+    new_downloads_cols = {
+        "retry_count": "INTEGER DEFAULT 0",
+        "last_retry": "TEXT",
+        "last_error": "TEXT",
+        "retry_history": "TEXT",
+        "resume_status": "TEXT",
+        "subtitle_languages": "TEXT"
+    }
+    
+    for col, definition in new_downloads_cols.items():
+        if col not in existing_downloads_cols:
+            sql = f"ALTER TABLE downloads ADD COLUMN {col} {definition}"
+            logger.info("Migrating downloads table: adding column '%s'", col)
+            try:
+                conn.execute(sql)
+            except Exception as e:
+                logger.error("Failed to migrate column %s in downloads table: %s", col, e)
+                
+    # 3. Migrate compressions table
+    cursor.execute("PRAGMA table_info(compressions);")
+    existing_compressions_cols = {row[1] for row in cursor.fetchall()}
+    
+    new_compressions_cols = {
+        "gpu_encoder": "TEXT",
+        "compression_preset": "TEXT",
+        "compression_stats": "TEXT"
+    }
+    
+    for col, definition in new_compressions_cols.items():
+        if col not in existing_compressions_cols:
+            sql = f"ALTER TABLE compressions ADD COLUMN {col} {definition}"
+            logger.info("Migrating compressions table: adding column '%s'", col)
+            try:
+                conn.execute(sql)
+            except Exception as e:
+                logger.error("Failed to migrate column %s in compressions table: %s", col, e)
 
 
 # ---------------------------------------------------------------------------

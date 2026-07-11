@@ -37,8 +37,8 @@ const PLATFORMS = [
   { label: '& more',    color: '#888' },
 ]
 
-export default function UrlPasteModal({ onClose, onStartDownload, defaultSaveTo }) {
-  const [url, setUrl]                 = useState('')
+export default function UrlPasteModal({ onClose, onStartDownload, defaultSaveTo, initialUrl }) {
+  const [url, setUrl]                 = useState(initialUrl || '')
   const [saveTo, setSaveTo]           = useState(defaultSaveTo || '')
   const [error, setError]             = useState('')
   const [loading, setLoading]         = useState(false)
@@ -50,10 +50,12 @@ export default function UrlPasteModal({ onClose, onStartDownload, defaultSaveTo 
 
   useEffect(() => {
     inputRef.current?.focus()
-    navigator.clipboard?.readText?.().then(text => {
-      if (text?.startsWith('http')) setUrl(text.trim())
-    }).catch(() => {})
-  }, [])
+    if (!initialUrl) {
+      navigator.clipboard?.readText?.().then(text => {
+        if (text?.startsWith('http')) setUrl(text.trim())
+      }).catch(() => {})
+    }
+  }, [initialUrl])
 
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') onClose() }

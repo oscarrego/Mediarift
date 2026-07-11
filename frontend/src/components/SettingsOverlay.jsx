@@ -11,6 +11,7 @@ const NAV_SECTIONS = [
   { id: 'general',        label: 'General' },
   { id: 'network',        label: 'Network' },
   { id: 'traffic',        label: 'Traffic Limits' },
+  { id: 'compression',    label: 'Compression' },
   { id: 'advanced',       label: 'Advanced' },
 ]
 
@@ -103,7 +104,7 @@ function GeneralSection({ settings, onSettingsChange, fontSize, onFontSizeChange
 
       {/* Downloads section */}
       <div className={styles.block}>
-        <h3 className={styles.blockLabel}>Downloads</h3>
+        <h3 className={styles.blockLabel}>Downloads & Subtitles</h3>
         <div className={styles.checkList}>
           <CheckRow
             id="prefs-auto-remove-deleted"
@@ -123,6 +124,85 @@ function GeneralSection({ settings, onSettingsChange, fontSize, onFontSizeChange
             onChange={v => onSettingsChange({ auto_retry_failed: v })}
             label="Automatically retry failed downloads"
           />
+          
+          <div className={styles.inlineFieldRow}>
+            <label htmlFor="prefs-max-retries" className={styles.inlineFieldLabel}>Max retries:</label>
+            <input
+              id="prefs-max-retries"
+              className={styles.numInputSmall}
+              type="number"
+              min="0"
+              max="10"
+              value={settings?.max_retries ?? 3}
+              onChange={e => onSettingsChange({ max_retries: parseInt(e.target.value) || 0 })}
+            />
+          </div>
+
+          <CheckRow
+            id="prefs-auto-download-subs"
+            checked={settings?.auto_download_subtitles ?? false}
+            onChange={v => onSettingsChange({ auto_download_subtitles: v })}
+            label="Auto-download subtitles"
+          />
+
+          {settings?.auto_download_subtitles && (
+            <div className={styles.subFieldsBlock}>
+              <div className={styles.inlineFieldRow}>
+                <label htmlFor="prefs-sub-format" className={styles.inlineFieldLabel}>Subtitle Format:</label>
+                <select
+                  id="prefs-sub-format"
+                  className={styles.selectInputSmall}
+                  value={settings?.subtitle_format ?? 'srt'}
+                  onChange={e => onSettingsChange({ subtitle_format: e.target.value })}
+                >
+                  <option value="srt">SRT</option>
+                  <option value="vtt">VTT</option>
+                  <option value="ass">ASS</option>
+                </select>
+              </div>
+
+              <div className={styles.inlineFieldRow}>
+                <label htmlFor="prefs-sub-langs" className={styles.inlineFieldLabel}>Subtitle Languages (comma-separated):</label>
+                <input
+                  id="prefs-sub-langs"
+                  className={styles.textInputSmall}
+                  type="text"
+                  placeholder="en,es"
+                  value={settings?.subtitle_languages ?? 'en'}
+                  onChange={e => onSettingsChange({ subtitle_languages: e.target.value })}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Clipboard Monitoring section */}
+      <div className={styles.block}>
+        <h3 className={styles.blockLabel}>Clipboard Monitoring</h3>
+        <div className={styles.checkList}>
+          <CheckRow
+            id="prefs-enable-clipboard"
+            checked={settings?.enable_clipboard_monitoring ?? true}
+            onChange={v => onSettingsChange({ enable_clipboard_monitoring: v })}
+            label="Enable clipboard monitoring"
+            desc="Automatically check the clipboard for valid media links to download."
+          />
+
+          {settings?.enable_clipboard_monitoring && (
+            <div className={styles.inlineFieldRow}>
+              <label htmlFor="prefs-clipboard-interval" className={styles.inlineFieldLabel}>Check interval (seconds):</label>
+              <input
+                id="prefs-clipboard-interval"
+                className={styles.numInputSmall}
+                type="number"
+                min="1"
+                max="60"
+                value={settings?.clipboard_monitoring_interval ?? 2}
+                onChange={e => onSettingsChange({ clipboard_monitoring_interval: parseInt(e.target.value) || 2 })}
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -166,6 +246,53 @@ function NetworkSection({ settings, onSettingsChange }) {
   )
 }
 
+/* Helper component for editable cells in Traffic Limits table */
+function TableCellInput({ value, onChange, isSpeed = false, isDownloads = false, isActive }) {
+  const [focused, setFocused] = useState(false)
+  const [tempValue, setTempValue] = useState(null)
+
+  let formattedDisplay = ''
+  if (value === 0 && (isSpeed || isDownloads)) {
+    formattedDisplay = 'Unlimited'
+  } else if (isSpeed) {
+    if (value >= 1024 && value % 1024 === 0) {
+      formattedDisplay = `${value / 1024} MB/s`
+    } else {
+      formattedDisplay = `${value} KB/s`
+    }
+  } else {
+    formattedDisplay = value.toString()
+  }
+
+  const displayValue = focused 
+    ? (tempValue !== null ? tempValue : (value === 0 && (isSpeed || isDownloads) ? '' : value.toString()))
+    : formattedDisplay
+
+  return (
+    <input
+      type="text"
+      className={`${styles.cellInput} ${isActive ? styles.cellInputActive : ''}`}
+      value={displayValue}
+      onFocus={() => {
+        setFocused(true)
+        setTempValue(value === 0 && (isSpeed || isDownloads) ? '' : value.toString())
+      }}
+      onChange={e => {
+        const val = e.target.value
+        if (/^\d*$/.test(val)) {
+          setTempValue(val)
+        }
+      }}
+      onBlur={() => {
+        setFocused(false)
+        const parsed = parseInt(tempValue) || 0
+        onChange(parsed)
+        setTempValue(null)
+      }}
+    />
+  )
+}
+
 /* ── TRAFFIC LIMITS ── */
 function TrafficSection({ settings, onSettingsChange }) {
   const customLimitEnabled = (settings?.speed_limit_kbps ?? 0) > 0
@@ -180,57 +307,100 @@ function TrafficSection({ settings, onSettingsChange }) {
           {/* Header row */}
           <div className={styles.trafficHeaderRow}>
             <div className={styles.trafficLabel} />
-            <div className={styles.trafficCol}>
-              <span className={`${styles.colHead} ${settings?.speed_preset === 'low' && !customLimitEnabled ? styles.colHeadActive : ''}`}>Low</span>
-            </div>
-            <div className={styles.trafficCol}>
-              <span className={`${styles.colHead} ${settings?.speed_preset === 'medium' && !customLimitEnabled ? styles.colHeadActive : ''}`}>Medium</span>
-            </div>
-            <div className={styles.trafficCol}>
-              <span className={`${styles.colHead} ${settings?.speed_preset === 'high' && !customLimitEnabled ? styles.colHeadActive : ''}`}>High</span>
-            </div>
-            <div className={styles.trafficCol}>
-              <span className={`${styles.colHead} ${settings?.speed_preset === 'max' && !customLimitEnabled ? styles.colHeadActive : ''}`}>Max</span>
-            </div>
+            {['low','medium','high','max'].map(k => {
+              const active = settings?.speed_preset === k && !customLimitEnabled;
+              return (
+                <div key={k} className={styles.trafficCol}>
+                  <button
+                    className={`${styles.colHeadBtn} ${active ? styles.colHeadActive : ''}`}
+                    onClick={() => onSettingsChange({
+                      speed_preset: k,
+                      speed_limit_kbps: 0,
+                      max_concurrent_downloads: settings?.[`preset_${k}_max_downloads`] !== undefined
+                        ? settings[`preset_${k}_max_downloads`]
+                        : (k === 'low' ? 2 : k === 'medium' ? 3 : k === 'high' ? 4 : 3)
+                    })}
+                  >
+                    {k.charAt(0).toUpperCase() + k.slice(1)}
+                  </button>
+                </div>
+              );
+            })}
           </div>
 
           {/* Download speed row */}
           <div className={styles.trafficRow}>
             <div className={styles.trafficLabel}>Download speed</div>
-            {['low','medium','high','max'].map(k => (
-              <button
-                key={k}
-                className={`${styles.presetCell} ${settings?.speed_preset === k && !customLimitEnabled ? styles.presetCellActive : ''}`}
-                onClick={() => onSettingsChange({ speed_preset: k, speed_limit_kbps: 0 })}
-                id={`traffic-preset-${k}`}
-              >
-                {k === 'low' ? '256 KB/s' : k === 'medium' ? '2 MB/s' : 'Unlimited'}
-              </button>
-            ))}
+            {['low','medium','high','max'].map(k => {
+              const active = settings?.speed_preset === k && !customLimitEnabled;
+              return (
+                <div key={k} className={styles.trafficCell}>
+                  <TableCellInput
+                    value={settings?.[`preset_${k}_speed_kbps`] ?? (k === 'low' ? 256 : k === 'medium' ? 2048 : 0)}
+                    onChange={v => onSettingsChange({ [`preset_${k}_speed_kbps`]: v })}
+                    isSpeed={true}
+                    isActive={active}
+                  />
+                </div>
+              );
+            })}
           </div>
 
           {/* Max simultaneous connections */}
           <div className={styles.trafficRow}>
             <div className={styles.trafficLabel}>Max simultaneous connections</div>
-            {['15','50','200','200'].map((v, i) => (
-              <div key={i} className={styles.trafficStaticCell}>{v}</div>
-            ))}
+            {['low','medium','high','max'].map(k => {
+              const active = settings?.speed_preset === k && !customLimitEnabled;
+              return (
+                <div key={k} className={styles.trafficCell}>
+                  <TableCellInput
+                    value={settings?.[`preset_${k}_max_conn`] ?? (k === 'low' ? 15 : k === 'medium' ? 50 : 200)}
+                    onChange={v => onSettingsChange({ [`preset_${k}_max_conn`]: v })}
+                    isActive={active}
+                  />
+                </div>
+              );
+            })}
           </div>
 
           {/* Max connections per server */}
           <div className={styles.trafficRow}>
             <div className={styles.trafficLabel}>Max connections per server</div>
-            {['5','8','15','15'].map((v, i) => (
-              <div key={i} className={styles.trafficStaticCell}>{v}</div>
-            ))}
+            {['low','medium','high','max'].map(k => {
+              const active = settings?.speed_preset === k && !customLimitEnabled;
+              return (
+                <div key={k} className={styles.trafficCell}>
+                  <TableCellInput
+                    value={settings?.[`preset_${k}_server_conn`] ?? (k === 'low' ? 5 : k === 'medium' ? 8 : 15)}
+                    onChange={v => onSettingsChange({ [`preset_${k}_server_conn`]: v })}
+                    isActive={active}
+                  />
+                </div>
+              );
+            })}
           </div>
 
           {/* Max simultaneous downloads */}
           <div className={styles.trafficRow}>
             <div className={styles.trafficLabel}>Max simultaneous downloads</div>
-            {['2','3','4','Unlimited'].map((v, i) => (
-              <div key={i} className={styles.trafficStaticCell}>{v}</div>
-            ))}
+            {['low','medium','high','max'].map(k => {
+              const active = settings?.speed_preset === k && !customLimitEnabled;
+              return (
+                <div key={k} className={styles.trafficCell}>
+                  <TableCellInput
+                    value={settings?.[`preset_${k}_max_downloads`] ?? (k === 'low' ? 2 : k === 'medium' ? 3 : k === 'high' ? 4 : 0)}
+                    onChange={v => {
+                      onSettingsChange({ [`preset_${k}_max_downloads`]: v });
+                      if (active) {
+                        onSettingsChange({ max_concurrent_downloads: v });
+                      }
+                    }}
+                    isDownloads={true}
+                    isActive={active}
+                  />
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -301,16 +471,115 @@ function AdvancedSection() {
   )
 }
 
+/* ── COMPRESSION ── */
+function CompressionSection({ settings, onSettingsChange }) {
+  return (
+    <div className={styles.section} aria-labelledby="sec-compression">
+      <h2 className={styles.sectionTitle} id="sec-compression">Compression</h2>
+      
+      {/* Preferred GPU Encoder */}
+      <div className={styles.block}>
+        <h3 className={styles.blockLabel}>Preferred GPU Encoder</h3>
+        <select
+          className={styles.selectInput}
+          value={settings?.preferred_gpu_encoder ?? 'auto'}
+          onChange={e => onSettingsChange({ preferred_gpu_encoder: e.target.value })}
+          id="prefs-gpu-encoder"
+        >
+          <option value="auto">Auto (Best Available)</option>
+          <option value="cpu">CPU (None)</option>
+          <option value="nvenc">NVIDIA NVENC</option>
+          <option value="qsv">Intel Quick Sync (QSV)</option>
+          <option value="amf">AMD AMF</option>
+        </select>
+      </div>
+
+      {/* Compression Preset */}
+      <div className={styles.block}>
+        <h3 className={styles.blockLabel}>Compression Preset</h3>
+        <select
+          className={styles.selectInput}
+          value={settings?.compression_preset ?? 'balanced'}
+          onChange={e => onSettingsChange({ compression_preset: e.target.value })}
+          id="prefs-compress-preset"
+        >
+          <option value="fast">Fast (Lower Compression)</option>
+          <option value="balanced">Balanced (Recommended)</option>
+          <option value="max_compression">Maximum Compression (Slowest)</option>
+          <option value="archival_quality">Archival Quality (Large File)</option>
+        </select>
+      </div>
+
+      {/* Preferred Video Codec */}
+      <div className={styles.block}>
+        <h3 className={styles.blockLabel}>Preferred Video Codec</h3>
+        <select
+          className={styles.selectInput}
+          value={settings?.preferred_video_codec ?? 'h264'}
+          onChange={e => onSettingsChange({ preferred_video_codec: e.target.value })}
+          id="prefs-video-codec"
+        >
+          <option value="h264">H.264 (Most Compatible)</option>
+          <option value="h265">H.265 / HEVC</option>
+          <option value="vp9">VP9 (Google/WebM)</option>
+          <option value="av1">AV1 (Next-Gen Open Format)</option>
+        </select>
+      </div>
+
+      {/* Preferred Audio Codec */}
+      <div className={styles.block}>
+        <h3 className={styles.blockLabel}>Preferred Audio Codec</h3>
+        <select
+          className={styles.selectInput}
+          value={settings?.preferred_audio_codec ?? 'aac'}
+          onChange={e => onSettingsChange({ preferred_audio_codec: e.target.value })}
+          id="prefs-audio-codec"
+        >
+          <option value="aac">AAC (Advanced Audio Coding)</option>
+          <option value="mp3">MP3 (MPEG Audio Layer 3)</option>
+          <option value="opus">Opus (High Performance)</option>
+          <option value="flac">FLAC (Lossless)</option>
+        </select>
+      </div>
+
+      {/* Audio Quality */}
+      <div className={styles.block}>
+        <h3 className={styles.blockLabel}>Audio Quality</h3>
+        <select
+          className={styles.selectInput}
+          value={settings?.audio_quality ?? 'high'}
+          onChange={e => onSettingsChange({ audio_quality: e.target.value })}
+          id="prefs-audio-quality"
+        >
+          <option value="low">Low (VBR Joint Stereo, 96 kbps)</option>
+          <option value="medium">Medium (VBR Joint Stereo, 128 kbps)</option>
+          <option value="high">High (Psychoacoustic, 192+ kbps)</option>
+        </select>
+      </div>
+
+      {/* Max Quality Algorithms Checkbox */}
+      <CheckRow
+        id="prefs-use-max-quality"
+        checked={settings?.use_max_quality_algorithms ?? false}
+        onChange={v => onSettingsChange({ use_max_quality_algorithms: v })}
+        label="Use maximum-quality algorithms"
+        desc="Enables optimal Huffman tables, 4:4:4 color subsampling, and maximum encoder effort."
+      />
+    </div>
+  )
+}
+
 /* ── ROOT ── */
 export default function SettingsOverlay({ settings, onSettingsChange, fontSize, onFontSizeChange, onClose, inPanel }) {
   const [activeSection, setActiveSection] = useState('general')
 
   const renderSection = () => {
     switch (activeSection) {
-      case 'general':  return <GeneralSection  settings={settings} onSettingsChange={onSettingsChange} fontSize={fontSize} onFontSizeChange={onFontSizeChange} />
-      case 'network':  return <NetworkSection  settings={settings} onSettingsChange={onSettingsChange} />
-      case 'traffic':  return <TrafficSection  settings={settings} onSettingsChange={onSettingsChange} />
-      case 'advanced': return <AdvancedSection />
+      case 'general':     return <GeneralSection  settings={settings} onSettingsChange={onSettingsChange} fontSize={fontSize} onFontSizeChange={onFontSizeChange} />
+      case 'network':     return <NetworkSection  settings={settings} onSettingsChange={onSettingsChange} />
+      case 'traffic':     return <TrafficSection  settings={settings} onSettingsChange={onSettingsChange} />
+      case 'compression': return <CompressionSection settings={settings} onSettingsChange={onSettingsChange} />
+      case 'advanced':    return <AdvancedSection />
       default: return null
     }
   }

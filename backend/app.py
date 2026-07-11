@@ -14,7 +14,7 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
-logger = logging.getLogger("ytshort")
+logger = logging.getLogger("mediarift")
 
 # Initialize database (creates schemas, runs migrations, recovers unfinished downloads)
 import database

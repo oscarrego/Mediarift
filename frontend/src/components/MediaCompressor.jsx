@@ -7,7 +7,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import styles from './MediaCompressor.module.css'
 import detailStyles from './DetailPanel.module.css'
-import { compressFile, fetchCompressProgress } from '../services/api'
+import { compressFile, fetchCompressProgressData, pauseCompress, resumeCompress, cancelCompress } from '../services/api'
 
 
 const DownloadDoneIcon = () => (
@@ -69,6 +69,12 @@ const PauseIcon = () => (
   <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <rect x="6" y="4" width="4" height="16"/>
     <rect x="14" y="4" width="4" height="16"/>
+  </svg>
+)
+
+const StopIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="4" y="4" width="16" height="16" rx="2"/>
   </svg>
 )
 
@@ -147,7 +153,9 @@ function FileItem({
   selected,
   onClick,
   onPlay,
-  onPause
+  onPause,
+  onResume,
+  onCancel
 }) {
   const isVideo = isVideoFile(item.file.name)
   const fromExt = getExtension(item.file.name)
@@ -201,7 +209,7 @@ function FileItem({
           {item.status === 'converting' && (
             <div className={styles.statusConverting}>
               <span className={styles.convertingDot} />
-              Compressing ({item.progressPercent || 0}%)
+              {item.isPaused ? 'Paused' : (item.stage || 'Compressing')} ({item.progressPercent || 0}%)
             </div>
           )}
           {item.status === 'done' && (
@@ -215,7 +223,7 @@ function FileItem({
             </button>
           )}
           {item.status === 'error' && (
-            <div className={styles.statusError}>Failed</div>
+            <div className={styles.statusError} title={item.stage}>Failed</div>
           )}
         </div>
 
@@ -225,18 +233,41 @@ function FileItem({
               className={styles.rowControlBtn}
               onClick={(e) => { e.stopPropagation(); onPlay(); }}
               title="Compress file"
+              id={`action-play-${item.id}`}
             >
               <PlayIcon />
             </button>
           )}
           {item.status === 'converting' && (
-            <button
-              className={styles.rowControlBtn}
-              onClick={(e) => { e.stopPropagation(); onPause(); }}
-              title="Stop compression"
-            >
-              <PauseIcon />
-            </button>
+            <>
+              {item.isPaused ? (
+                <button
+                  className={styles.rowControlBtn}
+                  onClick={(e) => { e.stopPropagation(); onResume(); }}
+                  title="Resume compression"
+                  id={`action-resume-${item.id}`}
+                >
+                  <PlayIcon />
+                </button>
+              ) : (
+                <button
+                  className={styles.rowControlBtn}
+                  onClick={(e) => { e.stopPropagation(); onPause(); }}
+                  title="Pause compression"
+                  id={`action-pause-${item.id}`}
+                >
+                  <PauseIcon />
+                </button>
+              )}
+              <button
+                className={styles.rowControlBtn}
+                onClick={(e) => { e.stopPropagation(); onCancel(); }}
+                title="Cancel compression"
+                id={`action-cancel-${item.id}`}
+              >
+                <StopIcon />
+              </button>
+            </>
           )}
         </div>
 
@@ -359,7 +390,13 @@ export default function MediaCompressor({ settings, onSettingsChange, onTogglePa
     setFiles(prev => prev.map(f => f.id === id ? { 
       ...f, 
       status: 'converting', 
-      progressPercent: 0 
+      isPaused: false,
+      progressPercent: 0,
+      taskId,
+      stage: 'Initializing...',
+      algorithm: '',
+      encoder: '',
+      ratio: ''
     } : f))
 
     const controller = new AbortController()
@@ -369,8 +406,15 @@ export default function MediaCompressor({ settings, onSettingsChange, onTogglePa
     try {
       intervalId = setInterval(async () => {
         try {
-          const progress = await fetchCompressProgress(taskId)
-          setFiles(prev => prev.map(f => f.id === id ? { ...f, progressPercent: progress } : f))
+          const data = await fetchCompressProgressData(taskId)
+          setFiles(prev => prev.map(f => f.id === id ? { 
+            ...f, 
+            progressPercent: data.progress ?? 0,
+            stage: data.stage || f.stage,
+            encoder: data.encoder || f.encoder,
+            algorithm: data.algorithm || f.algorithm,
+            ratio: data.ratio || f.ratio
+          } : f))
         } catch (e) {
           console.error('Failed to fetch progress:', e)
         }
@@ -390,27 +434,58 @@ export default function MediaCompressor({ settings, onSettingsChange, onTogglePa
         outputBlob: compressedBlob,
         outputSize: compressedSize,
         savingPercent,
-        progressPercent: 100
+        progressPercent: 100,
+        stage: 'Completed'
       } : f))
     } catch (err) {
       if (intervalId) clearInterval(intervalId)
       if (err.name !== 'AbortError') {
         console.error('Compression failed:', err)
-        setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'error', progressPercent: 0 } : f))
+        setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'error', progressPercent: 0, stage: 'Error: ' + err.message } : f))
       }
     } finally {
       delete abortControllersRef.current[id]
     }
   }, [files])
 
-  const handleCancelSingle = useCallback((id) => {
+  const handlePauseSingle = useCallback(async (id) => {
+    const item = files.find(f => f.id === id)
+    if (!item || !item.taskId) return
+    try {
+      await pauseCompress(item.taskId)
+      setFiles(prev => prev.map(f => f.id === id ? { ...f, isPaused: true, stage: 'Paused' } : f))
+    } catch (e) {
+      console.error('Failed to pause compression:', e)
+    }
+  }, [files])
+
+  const handleResumeSingle = useCallback(async (id) => {
+    const item = files.find(f => f.id === id)
+    if (!item || !item.taskId) return
+    try {
+      await resumeCompress(item.taskId)
+      setFiles(prev => prev.map(f => f.id === id ? { ...f, isPaused: false, stage: 'Resuming...' } : f))
+    } catch (e) {
+      console.error('Failed to resume compression:', e)
+    }
+  }, [files])
+
+  const handleCancelSingle = useCallback(async (id) => {
+    const item = files.find(f => f.id === id)
+    if (item && item.taskId) {
+      try {
+        await cancelCompress(item.taskId)
+      } catch (e) {
+        console.error('Failed to cancel compression on backend:', e)
+      }
+    }
     const controller = abortControllersRef.current[id]
     if (controller) {
       controller.abort()
       delete abortControllersRef.current[id]
     }
-    setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'idle' } : f))
-  }, [])
+    setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'idle', isPaused: false, progressPercent: 0, stage: '' } : f))
+  }, [files])
 
   const handleCompressAll = useCallback(async () => {
     const pending = files.filter(f => f.status === 'idle' || f.status === 'error')
@@ -418,7 +493,7 @@ export default function MediaCompressor({ settings, onSettingsChange, onTogglePa
     setCompressing(true)
 
     for (const item of pending) {
-            const currentItem = files.find(f => f.id === item.id)
+      const currentItem = files.find(f => f.id === item.id)
       if (!currentItem || (currentItem.status !== 'idle' && currentItem.status !== 'error')) continue
 
       const taskId = 'compress-' + Math.random().toString(36).slice(2, 11)
@@ -426,7 +501,13 @@ export default function MediaCompressor({ settings, onSettingsChange, onTogglePa
       setFiles(prev => prev.map(f => f.id === item.id ? { 
         ...f, 
         status: 'converting', 
-        progressPercent: 0 
+        isPaused: false,
+        progressPercent: 0,
+        taskId,
+        stage: 'Initializing...',
+        algorithm: '',
+        encoder: '',
+        ratio: ''
       } : f))
 
       const controller = new AbortController()
@@ -436,8 +517,15 @@ export default function MediaCompressor({ settings, onSettingsChange, onTogglePa
       try {
         intervalId = setInterval(async () => {
           try {
-            const progress = await fetchCompressProgress(taskId)
-            setFiles(prev => prev.map(f => f.id === item.id ? { ...f, progressPercent: progress } : f))
+            const data = await fetchCompressProgressData(taskId)
+            setFiles(prev => prev.map(f => f.id === item.id ? { 
+              ...f, 
+              progressPercent: data.progress ?? 0,
+              stage: data.stage || f.stage,
+              encoder: data.encoder || f.encoder,
+              algorithm: data.algorithm || f.algorithm,
+              ratio: data.ratio || f.ratio
+            } : f))
           } catch {}
         }, 1000)
 
@@ -455,13 +543,14 @@ export default function MediaCompressor({ settings, onSettingsChange, onTogglePa
           outputBlob: compressedBlob,
           outputSize: compressedSize,
           savingPercent,
-          progressPercent: 100
+          progressPercent: 100,
+          stage: 'Completed'
         } : f))
       } catch (err) {
         if (intervalId) clearInterval(intervalId)
         if (err.name !== 'AbortError') {
           console.error('Compression failed:', err)
-          setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: 'error', progressPercent: 0 } : f))
+          setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: 'error', progressPercent: 0, stage: 'Error: ' + err.message } : f))
         }
       } finally {
         delete abortControllersRef.current[item.id]
@@ -572,7 +661,9 @@ export default function MediaCompressor({ settings, onSettingsChange, onTogglePa
                   selected={selectedFile?.id === item.id}
                   onClick={() => setSelectedFileId(item.id)}
                   onPlay={() => handleCompressSingle(item.id)}
-                  onPause={() => handleCancelSingle(item.id)}
+                  onPause={() => handlePauseSingle(item.id)}
+                  onResume={() => handleResumeSingle(item.id)}
+                  onCancel={() => handleCancelSingle(item.id)}
                 />
               ))}
             </div>
@@ -695,6 +786,18 @@ export default function MediaCompressor({ settings, onSettingsChange, onTogglePa
                     <MetaRow label="Original Size" value={formatBytes(selectedFile.file.size)} />
                     <MetaRow label="Compression Level" value={selectedFile.level.toUpperCase()} />
                     <MetaRow label="Status" value={selectedFile.status.toUpperCase()} />
+                    {selectedFile.algorithm && (
+                      <MetaRow label="Algorithm" value={selectedFile.algorithm} />
+                    )}
+                    {selectedFile.encoder && (
+                      <MetaRow label="Hardware Encoder" value={selectedFile.encoder} />
+                    )}
+                    {selectedFile.stage && (
+                      <MetaRow label="Current Stage" value={selectedFile.stage} />
+                    )}
+                    {selectedFile.ratio && (
+                      <MetaRow label="Compression Ratio" value={selectedFile.ratio} />
+                    )}
                     {selectedFile.outputSize && (
                       <>
                         <MetaRow label="Compressed Size" value={formatBytes(selectedFile.outputSize)} />

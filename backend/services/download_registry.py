@@ -11,7 +11,7 @@ import uuid
 import logging
 from typing import Any
 
-logger = logging.getLogger("ytshort.download_registry")
+logger = logging.getLogger("mediarift.download_registry")
 
 STATE_QUEUED     = "queued"
 STATE_FETCHING   = "fetching"   # fetching media info

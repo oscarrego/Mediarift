@@ -30,9 +30,9 @@ export async function fetchMediaInfo(url) {
 /**
  * Start a new download. Returns { id } immediately; progress is polled.
  */
-export async function startDownload({ url, format_id, download_type, quality_label, thumbnail_ext }) {
+export async function startDownload({ url, format_id, download_type, quality_label, thumbnail_ext, subtitles_options }) {
   const res = await _request('POST', '/api/download', {
-    url, format_id, download_type, quality_label, thumbnail_ext,
+    url, format_id, download_type, quality_label, thumbnail_ext, subtitles_options,
   })
   return res
 }
@@ -53,6 +53,10 @@ export async function pauseDownload(id) {
 
 export async function resumeDownload(id) {
   return _request('POST', `/api/downloads/${id}/resume`)
+}
+
+export async function restartDownload(id) {
+  return _request('POST', `/api/downloads/${id}/restart`)
 }
 
 export async function stopDownload(id) {
@@ -171,6 +175,46 @@ export async function fetchCompressProgress(taskId) {
   if (!res.ok) return 0
   const data = await res.json()
   return data.progress ?? 0
+}
+
+export async function fetchConvertProgressData(taskId) {
+  const res = await fetch(`${BASE_URL}/api/convert/progress/${taskId}`)
+  if (!res.ok) return { progress: 0 }
+  return res.json()
+}
+
+export async function fetchCompressProgressData(taskId) {
+  const res = await fetch(`${BASE_URL}/api/compress/progress/${taskId}`)
+  if (!res.ok) return { progress: 0 }
+  return res.json()
+}
+
+export async function pauseConvert(taskId) {
+  return _request('POST', `/api/convert/${taskId}/pause`)
+}
+
+export async function resumeConvert(taskId) {
+  return _request('POST', `/api/convert/${taskId}/resume`)
+}
+
+export async function cancelConvert(taskId) {
+  return _request('POST', `/api/convert/${taskId}/cancel`)
+}
+
+export async function pauseCompress(taskId) {
+  return _request('POST', `/api/compress/${taskId}/pause`)
+}
+
+export async function resumeCompress(taskId) {
+  return _request('POST', `/api/compress/${taskId}/resume`)
+}
+
+export async function cancelCompress(taskId) {
+  return _request('POST', `/api/compress/${taskId}/cancel`)
+}
+
+export async function detectClipboard(lastUrl) {
+  return _request('POST', '/api/clipboard/detect', { last_url: lastUrl })
 }
 
 

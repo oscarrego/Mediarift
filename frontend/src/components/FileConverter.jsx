@@ -7,7 +7,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import styles from './FileConverter.module.css'
 import detailStyles from './DetailPanel.module.css'
-import { convertFile, fetchConvertProgress } from '../services/api'
+import { convertFile, fetchConvertProgress, fetchConvertProgressData, pauseConvert, resumeConvert, cancelConvert } from '../services/api'
 import CustomSelect from './CustomSelect'
 
 
@@ -94,6 +94,12 @@ const PauseIcon = () => (
   <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <rect x="6" y="4" width="4" height="16"/>
     <rect x="14" y="4" width="4" height="16"/>
+  </svg>
+)
+
+const StopIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="4" y="4" width="16" height="16" rx="2"/>
   </svg>
 )
 
@@ -196,7 +202,7 @@ function getExtension(filename) {
 }
 
 
-function FileItem({ file, toFormat, onToFormatChange, onRemove, onDownload, status, category, selected, onClick, onPlay, onPause, progressPercent }) {
+function FileItem({ file, toFormat, onToFormatChange, onRemove, onDownload, status, category, selected, onClick, onPlay, onPause, onResume, onCancel, progressPercent, isPaused, stage }) {
   const cat = CATEGORIES[category]
   const fromExt = getExtension(file.name)
   const conversionOptions = cat.conversions.find(c => c.from === fromExt)?.to || cat.conversions[0]?.to || []
@@ -241,7 +247,7 @@ function FileItem({ file, toFormat, onToFormatChange, onRemove, onDownload, stat
           {status === 'converting' && (
             <div className={styles.statusConverting}>
               <span className={styles.convertingDot} />
-              Converting ({progressPercent || 0}%)
+              {isPaused ? 'Paused' : (stage || 'Converting')} ({progressPercent || 0}%)
             </div>
           )}
           {status === 'done' && (
@@ -255,7 +261,7 @@ function FileItem({ file, toFormat, onToFormatChange, onRemove, onDownload, stat
             </button>
           )}
           {status === 'error' && (
-            <div className={styles.statusError}>Failed</div>
+            <div className={styles.statusError} title={stage}>Failed</div>
           )}
         </div>
 
@@ -265,18 +271,41 @@ function FileItem({ file, toFormat, onToFormatChange, onRemove, onDownload, stat
               className={styles.rowControlBtn}
               onClick={(e) => { e.stopPropagation(); onPlay(); }}
               title="Start Conversion"
+              id={`action-play-${file.name}`}
             >
               <PlayIcon />
             </button>
           )}
           {status === 'converting' && (
-            <button
-              className={styles.rowControlBtn}
-              onClick={(e) => { e.stopPropagation(); onPause(); }}
-              title="Stop Conversion"
-            >
-              <PauseIcon />
-            </button>
+            <>
+              {isPaused ? (
+                <button
+                  className={styles.rowControlBtn}
+                  onClick={(e) => { e.stopPropagation(); onResume(); }}
+                  title="Resume Conversion"
+                  id={`action-resume-${file.name}`}
+                >
+                  <PlayIcon />
+                </button>
+              ) : (
+                <button
+                  className={styles.rowControlBtn}
+                  onClick={(e) => { e.stopPropagation(); onPause(); }}
+                  title="Pause Conversion"
+                  id={`action-pause-${file.name}`}
+                >
+                  <PauseIcon />
+                </button>
+              )}
+              <button
+                className={styles.rowControlBtn}
+                onClick={(e) => { e.stopPropagation(); onCancel(); }}
+                title="Cancel Conversion"
+                id={`action-cancel-${file.name}`}
+              >
+                <StopIcon />
+              </button>
+            </>
           )}
         </div>
 
@@ -453,7 +482,13 @@ export default function FileConverter({ settings, onSettingsChange, onTogglePane
     setFiles(prev => prev.map(f => f.id === id ? { 
       ...f, 
       status: 'converting', 
-      progressPercent: 0 
+      isPaused: false,
+      progressPercent: 0,
+      taskId,
+      stage: 'Initializing...',
+      algorithm: '',
+      encoder: '',
+      ratio: ''
     } : f))
     
     const controller = new AbortController()
@@ -463,8 +498,15 @@ export default function FileConverter({ settings, onSettingsChange, onTogglePane
     try {
       intervalId = setInterval(async () => {
         try {
-          const progress = await fetchConvertProgress(taskId)
-          setFiles(prev => prev.map(f => f.id === id ? { ...f, progressPercent: progress } : f))
+          const data = await fetchConvertProgressData(taskId)
+          setFiles(prev => prev.map(f => f.id === id ? { 
+            ...f, 
+            progressPercent: data.progress ?? 0,
+            stage: data.stage || f.stage,
+            encoder: data.encoder || f.encoder,
+            algorithm: data.algorithm || f.algorithm,
+            ratio: data.ratio || f.ratio
+          } : f))
         } catch {}
       }, 1000)
 
@@ -475,27 +517,58 @@ export default function FileConverter({ settings, onSettingsChange, onTogglePane
         ...f, 
         status: 'done', 
         blob: convertedBlob,
-        progressPercent: 100 
+        progressPercent: 100,
+        stage: 'Completed'
       } : f))
     } catch (err) {
       if (intervalId) clearInterval(intervalId)
       if (err.name !== 'AbortError') {
         console.error('Conversion failed:', err)
-        setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'error', progressPercent: 0 } : f))
+        setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'error', progressPercent: 0, stage: 'Error: ' + err.message } : f))
       }
     } finally {
       delete abortControllersRef.current[id]
     }
   }, [files])
 
-  const handleCancelSingle = useCallback((id) => {
+  const handlePauseSingle = useCallback(async (id) => {
+    const item = files.find(f => f.id === id)
+    if (!item || !item.taskId) return
+    try {
+      await pauseConvert(item.taskId)
+      setFiles(prev => prev.map(f => f.id === id ? { ...f, isPaused: true, stage: 'Paused' } : f))
+    } catch (e) {
+      console.error('Failed to pause conversion:', e)
+    }
+  }, [files])
+
+  const handleResumeSingle = useCallback(async (id) => {
+    const item = files.find(f => f.id === id)
+    if (!item || !item.taskId) return
+    try {
+      await resumeConvert(item.taskId)
+      setFiles(prev => prev.map(f => f.id === id ? { ...f, isPaused: false, stage: 'Resuming...' } : f))
+    } catch (e) {
+      console.error('Failed to resume conversion:', e)
+    }
+  }, [files])
+
+  const handleCancelSingle = useCallback(async (id) => {
+    const item = files.find(f => f.id === id)
+    if (item && item.taskId) {
+      try {
+        await cancelConvert(item.taskId)
+      } catch (e) {
+        console.error('Failed to cancel conversion on backend:', e)
+      }
+    }
     const controller = abortControllersRef.current[id]
     if (controller) {
       controller.abort()
       delete abortControllersRef.current[id]
     }
-    setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'idle', progressPercent: 0 } : f))
-  }, [])
+    setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'idle', isPaused: false, progressPercent: 0, stage: '' } : f))
+  }, [files])
 
   // Actual conversion using backend API
   const handleConvertAll = useCallback(async () => {
@@ -504,7 +577,7 @@ export default function FileConverter({ settings, onSettingsChange, onTogglePane
     setConverting(true)
 
     for (const item of pending) {
-            const currentItem = files.find(f => f.id === item.id)
+      const currentItem = files.find(f => f.id === item.id)
       if (!currentItem || (currentItem.status !== 'idle' && currentItem.status !== 'error')) continue
 
       const taskId = 'convert-' + Math.random().toString(36).slice(2, 11)
@@ -512,7 +585,13 @@ export default function FileConverter({ settings, onSettingsChange, onTogglePane
       setFiles(prev => prev.map(f => f.id === item.id ? { 
         ...f, 
         status: 'converting', 
-        progressPercent: 0 
+        isPaused: false,
+        progressPercent: 0,
+        taskId,
+        stage: 'Initializing...',
+        algorithm: '',
+        encoder: '',
+        ratio: ''
       } : f))
       
       const controller = new AbortController()
@@ -522,8 +601,15 @@ export default function FileConverter({ settings, onSettingsChange, onTogglePane
       try {
         intervalId = setInterval(async () => {
           try {
-            const progress = await fetchConvertProgress(taskId)
-            setFiles(prev => prev.map(f => f.id === item.id ? { ...f, progressPercent: progress } : f))
+            const data = await fetchConvertProgressData(taskId)
+            setFiles(prev => prev.map(f => f.id === item.id ? { 
+              ...f, 
+              progressPercent: data.progress ?? 0,
+              stage: data.stage || f.stage,
+              encoder: data.encoder || f.encoder,
+              algorithm: data.algorithm || f.algorithm,
+              ratio: data.ratio || f.ratio
+            } : f))
           } catch {}
         }, 1000)
 
@@ -534,13 +620,14 @@ export default function FileConverter({ settings, onSettingsChange, onTogglePane
           ...f, 
           status: 'done', 
           blob: convertedBlob,
-          progressPercent: 100 
+          progressPercent: 100,
+          stage: 'Completed'
         } : f))
       } catch (err) {
         if (intervalId) clearInterval(intervalId)
         if (err.name !== 'AbortError') {
           console.error('Conversion failed:', err)
-          setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: 'error', progressPercent: 0 } : f))
+          setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: 'error', progressPercent: 0, stage: 'Error: ' + err.message } : f))
         }
       } finally {
         delete abortControllersRef.current[item.id]
@@ -656,8 +743,12 @@ export default function FileConverter({ settings, onSettingsChange, onTogglePane
                       selected={selectedFile?.id === item.id}
                       onClick={() => setSelectedFileId(item.id)}
                       onPlay={() => handleConvertSingle(item.id)}
-                      onPause={() => handleCancelSingle(item.id)}
+                      onPause={() => handlePauseSingle(item.id)}
+                      onResume={() => handleResumeSingle(item.id)}
+                      onCancel={() => handleCancelSingle(item.id)}
                       progressPercent={item.progressPercent}
+                      isPaused={item.isPaused}
+                      stage={item.stage}
                     />
                   ))}
                 </div>
@@ -746,6 +837,18 @@ export default function FileConverter({ settings, onSettingsChange, onTogglePane
                       <MetaRow label="Size" value={formatBytes(selectedFile.file.size)} />
                       <MetaRow label="Target Format" value={selectedFile.toFormat} />
                       <MetaRow label="Status" value={selectedFile.status.toUpperCase()} />
+                      {selectedFile.algorithm && (
+                        <MetaRow label="Algorithm" value={selectedFile.algorithm} />
+                      )}
+                      {selectedFile.encoder && (
+                        <MetaRow label="Hardware Encoder" value={selectedFile.encoder} />
+                      )}
+                      {selectedFile.stage && (
+                        <MetaRow label="Current Stage" value={selectedFile.stage} />
+                      )}
+                      {selectedFile.ratio && (
+                        <MetaRow label="Compression Ratio" value={selectedFile.ratio} />
+                      )}
                     </div>
                   </div>
                 </div>

@@ -11,7 +11,7 @@ from flask import Blueprint, request, jsonify, current_app
 from services.youtube import get_media_info, detect_platform, is_supported_url
 from services.ffmpeg import is_ffmpeg_available, get_ffmpeg_version
 
-logger = logging.getLogger("ytshort.routes.info")
+logger = logging.getLogger("mediarift.routes.info")
 
 info_bp = Blueprint("info", __name__)
 

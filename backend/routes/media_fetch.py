@@ -16,7 +16,7 @@ from urllib.parse import urljoin, urlparse, urlunparse
 
 from flask import Blueprint, request, jsonify
 
-logger = logging.getLogger("ytshort.routes.media_fetch")
+logger = logging.getLogger("mediarift.routes.media_fetch")
 
 media_fetch_bp = Blueprint("media_fetch", __name__)
 

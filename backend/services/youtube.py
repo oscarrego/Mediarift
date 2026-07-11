@@ -19,7 +19,7 @@ import yt_dlp
 
 from config import ActiveConfig as cfg
 
-logger = logging.getLogger("ytshort.youtube")
+logger = logging.getLogger("mediarift.youtube")
 
 PLATFORM_PATTERNS: dict[str, list[str]] = {
     "youtube": [
@@ -201,7 +201,36 @@ def _parse_info(raw: dict, platform: str, url: str) -> dict[str, Any]:
         "filesize_approx": filesize,
         "formats": formats,
         "video_type": _detect_video_type(platform, raw),
+        "subtitles": _parse_subtitles(raw),
     }
+
+
+def _parse_subtitles(raw: dict) -> list[dict]:
+    subtitles = []
+    # Manual subtitles
+    raw_subs = raw.get("subtitles") or {}
+    for lang, items in raw_subs.items():
+        exts = list(set(item.get("ext", "srt") for item in items if item.get("ext")))
+        subtitles.append({
+            "lang": lang,
+            "name": lang,
+            "exts": exts,
+            "type": "manual"
+        })
+        
+    # Automatic captions
+    raw_auto = raw.get("automatic_captions") or {}
+    for lang, items in raw_auto.items():
+        if any(s["lang"] == lang for s in subtitles):
+            continue
+        exts = list(set(item.get("ext", "srt") for item in items if item.get("ext")))
+        subtitles.append({
+            "lang": lang,
+            "name": f"{lang} (auto)",
+            "exts": exts,
+            "type": "auto"
+        })
+    return subtitles
 
 
 def _best_thumbnail(thumbnails: list[dict]) -> str:
@@ -350,6 +379,7 @@ def download_media(
     thumbnail_ext: str = "jpg",
     progress_hook=None,
     speed_kbps: int = 0,   # 0 = unlimited; >0 = KB/s rate limit
+    subtitles_options: dict = None,
 ) -> dict[str, Any]:
     """
     Download media to TEMP_DIR.
@@ -366,8 +396,8 @@ def download_media(
         if download_type == "thumbnail":
             return _download_thumbnail(url, job_dir, thumbnail_ext=thumbnail_ext)
         if download_type == "audio":
-            return _download_audio(url, job_dir, progress_hook, speed_kbps)
-        return _download_video(url, format_id, quality_label, job_dir, progress_hook, speed_kbps)
+            return _download_audio(url, job_dir, progress_hook, speed_kbps, subtitles_options)
+        return _download_video(url, format_id, quality_label, job_dir, progress_hook, speed_kbps, subtitles_options)
     except Exception:
         _cleanup_dir(job_dir)
         raise
@@ -380,6 +410,7 @@ def _download_video(
     job_dir: Path,
     progress_hook,
     speed_kbps: int = 0,
+    subtitles_options: dict = None,
 ) -> dict[str, Any]:
     """Download video (merging audio stream if necessary)."""
     outtmpl = str(job_dir / "%(title)s.%(ext)s")
@@ -403,6 +434,30 @@ def _download_video(
             }
         ],
     }
+    
+    # Subtitles options integration
+    if subtitles_options and subtitles_options.get("download_subtitles"):
+        langs = subtitles_options.get("subtitles_langs") or ["en"]
+        if subtitles_options.get("download_all_languages"):
+            langs = ["all"]
+        sub_format = subtitles_options.get("subtitle_format") or "srt"
+        embed = subtitles_options.get("embed_subtitles") or False
+        only_subs = subtitles_options.get("subtitles_only") or False
+        
+        ydl_opts["writesubtitles"] = True
+        ydl_opts["writeautomaticsub"] = True
+        ydl_opts["subtitleslangs"] = langs
+        ydl_opts["subtitlesformat"] = sub_format
+        
+        if only_subs:
+            ydl_opts["skip_download"] = True
+        elif embed:
+            ydl_opts["embedsubtitles"] = True
+            ydl_opts["postprocessors"].append({
+                "key": "FFmpegEmbedSubtitle",
+                "already_have_subtitle": False
+            })
+
     if speed_kbps and speed_kbps > 0:
         ydl_opts["ratelimit"] = speed_kbps * 1024  # bytes/s
     if progress_hook:
@@ -417,6 +472,16 @@ def _download_video(
     except yt_dlp.utils.DownloadError as exc:
         _handle_ydl_error(exc)
 
+    # If it was a subtitles-only download, search for subtitle files
+    if subtitles_options and subtitles_options.get("download_subtitles") and subtitles_options.get("subtitles_only"):
+        # Look for downloaded subtitle files
+        sub_exts = (".srt", ".vtt", ".ass")
+        for f in job_dir.iterdir():
+            if f.suffix.lower() in sub_exts:
+                filename = _sanitize_filename(f.name)
+                return {"filepath": str(f), "filename": filename, "mime": "text/plain"}
+        raise RuntimeError("Subtitles downloaded successfully but file was not found")
+
     # yt-dlp may change the extension after merging
     filepath = _resolve_actual_file(filepath, job_dir)
     filename = _sanitize_filename(Path(filepath).name)
@@ -424,7 +489,7 @@ def _download_video(
     return {"filepath": str(filepath), "filename": filename, "mime": "video/mp4"}
 
 
-def _download_audio(url: str, job_dir: Path, progress_hook, speed_kbps: int = 0) -> dict[str, Any]:
+def _download_audio(url: str, job_dir: Path, progress_hook, speed_kbps: int = 0, subtitles_options: dict = None) -> dict[str, Any]:
     outtmpl = str(job_dir / "%(title)s.%(ext)s")
 
     ydl_opts: dict[str, Any] = {
@@ -439,6 +504,23 @@ def _download_audio(url: str, job_dir: Path, progress_hook, speed_kbps: int = 0)
             }
         ],
     }
+    
+    # Subtitles options integration
+    if subtitles_options and subtitles_options.get("download_subtitles"):
+        langs = subtitles_options.get("subtitles_langs") or ["en"]
+        if subtitles_options.get("download_all_languages"):
+            langs = ["all"]
+        sub_format = subtitles_options.get("subtitle_format") or "srt"
+        only_subs = subtitles_options.get("subtitles_only") or False
+        
+        ydl_opts["writesubtitles"] = True
+        ydl_opts["writeautomaticsub"] = True
+        ydl_opts["subtitleslangs"] = langs
+        ydl_opts["subtitlesformat"] = sub_format
+        
+        if only_subs:
+            ydl_opts["skip_download"] = True
+
     if speed_kbps and speed_kbps > 0:
         ydl_opts["ratelimit"] = speed_kbps * 1024
     if progress_hook:
@@ -452,6 +534,15 @@ def _download_audio(url: str, job_dir: Path, progress_hook, speed_kbps: int = 0)
             filepath = ydl.prepare_filename(info)
     except yt_dlp.utils.DownloadError as exc:
         _handle_ydl_error(exc)
+
+    if subtitles_options and subtitles_options.get("download_subtitles") and subtitles_options.get("subtitles_only"):
+        # Look for downloaded subtitle files
+        sub_exts = (".srt", ".vtt", ".ass")
+        for f in job_dir.iterdir():
+            if f.suffix.lower() in sub_exts:
+                filename = _sanitize_filename(f.name)
+                return {"filepath": str(f), "filename": filename, "mime": "text/plain"}
+        raise RuntimeError("Subtitles downloaded successfully but file was not found")
 
     filepath = _resolve_actual_file(filepath, job_dir, preferred_ext=".mp3")
     filename = _sanitize_filename(Path(filepath).name)
@@ -558,7 +649,7 @@ def _resolve_actual_file(expected_path: str, job_dir: Path, preferred_ext: str =
         return expected_path
 
     stem = Path(expected_path).stem
-    for ext in (preferred_ext, ".mp4", ".mkv", ".webm", ".mp3", ".m4a", ".opus"):
+    for ext in (preferred_ext, ".mp4", ".mkv", ".webm", ".mp3", ".m4a", ".opus", ".srt", ".vtt", ".ass"):
         candidate = job_dir / (stem + ext)
         if candidate.is_file():
             return str(candidate)

@@ -19,7 +19,7 @@ BASE_DIR = Path(__file__).parent.resolve()
 class Config:
     APP_VERSION: str = "1.0.0"
     ENV: str = os.getenv("FLASK_ENV", "production")
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "ytshort-secret-change-me-in-production")
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "mediarift-secret-change-me-in-production")
 
     _cors_raw: str = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
     CORS_ORIGINS: list[str] = [o.strip() for o in _cors_raw.split(",") if o.strip()]

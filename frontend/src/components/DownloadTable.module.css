@@ -324,6 +324,19 @@
 
 .actionBtnFolder:hover { color: var(--color-accent); }
 .actionBtnDelete:hover { color: var(--color-error); }
+.actionBtnResume:hover { color: var(--color-accent); }
+.actionBtnRestart:hover { color: #10b981; }
+
+.stateRetrying {
+  color: #f59e0b; /* amber */
+}
+.stateResuming {
+  color: var(--color-accent);
+}
+.stateInterrupted {
+  color: var(--color-error);
+  font-weight: var(--weight-medium);
+}
 
 /* Empty state */
 .emptyState {

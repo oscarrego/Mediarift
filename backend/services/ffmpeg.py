@@ -17,25 +17,38 @@ from typing import Optional
 
 from config import ActiveConfig as cfg
 
-logger = logging.getLogger("ytshort.ffmpeg")
+logger = logging.getLogger("mediarift.ffmpeg")
 
 _progress_lock = threading.Lock()
-_progress_store: dict[str, int] = {}
+_progress_store: dict[str, dict] = {}
 
-def set_progress(task_id: str, percent: int) -> None:
+def set_progress(task_id: str, percent: int, stage: str = None, encoder: str = None, algorithm: str = None, ratio: str = None) -> None:
     if not task_id:
         return
     with _progress_lock:
-        _progress_store[task_id] = percent
+        if task_id not in _progress_store:
+            _progress_store[task_id] = {"progress": 0}
+        _progress_store[task_id]["progress"] = percent
+        if stage:
+            _progress_store[task_id]["stage"] = stage
+        if encoder:
+            _progress_store[task_id]["encoder"] = encoder
+        if algorithm:
+            _progress_store[task_id]["algorithm"] = algorithm
+        if ratio:
+            _progress_store[task_id]["ratio"] = ratio
 
 def get_progress(task_id: str) -> int:
     with _progress_lock:
-        return _progress_store.get(task_id, 0)
+        return _progress_store.get(task_id, {}).get("progress", 0)
+
+def get_progress_data(task_id: str) -> dict:
+    with _progress_lock:
+        return dict(_progress_store.get(task_id, {"progress": 0}))
 
 def clear_progress(task_id: str) -> None:
     with _progress_lock:
-        if task_id in _progress_store:
-            del _progress_store[task_id]
+        _progress_store.pop(task_id, None)
 
 
 def _ffmpeg_bin() -> str:
@@ -310,68 +323,95 @@ def convert_media(input_path: str, output_path: str, task_id: str = None) -> str
     return output_path
 
 
-def _run_ffmpeg(cmd: list) -> None:
-    """Run an FFmpeg command and raise RuntimeError on failure."""
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=cfg.YTDLP_TIMEOUT,
-        )
-    except subprocess.TimeoutExpired:
-        raise RuntimeError("FFmpeg media conversion timed out.")
-
-    if result.returncode != 0:
-        logger.error("FFmpeg stderr: %s", result.stderr)
-        raise RuntimeError(f"FFmpeg media conversion failed: {result.stderr.strip()}")
-
-
-def _run_ffmpeg_with_progress(cmd: list, task_id: str, total_duration: float) -> None:
-    """Run FFmpeg command and parse output to update task_id progress."""
-    if not task_id or not total_duration or total_duration <= 0:
-        _run_ffmpeg(cmd)
-        return
-
-    progress_cmd = list(cmd)
-    output_file = progress_cmd.pop()
-    progress_cmd += ["-progress", "-", output_file]
-
+def _execute_subprocess_task(cmd: list, task_id: str = None, total_duration: float = None) -> None:
+    """Run command as Popen, registering it in TaskManager, and handling pause/cancel/progress."""
+    import services.task_manager as tm
+    
+    logger.debug("Executing subprocess task: %s", " ".join(cmd))
+    
+    run_cmd = list(cmd)
+    if task_id and total_duration and total_duration > 0:
+        if "-progress" not in run_cmd:
+            output_file = run_cmd.pop()
+            run_cmd += ["-progress", "-", output_file]
+            
     try:
         process = subprocess.Popen(
-            progress_cmd,
-            stdout=subprocess.PIPE,
+            run_cmd,
+            stdout=subprocess.PIPE if (task_id and total_duration) else subprocess.DEVNULL,
             stderr=subprocess.PIPE,
             text=True,
             bufsize=1,
             universal_newlines=True
         )
-
-        while True:
-            line = process.stdout.readline()
-            if not line:
-                break
-            if line.startswith("out_time_us="):
-                try:
-                    us = int(line.split("=")[1].strip())
-                    current_time = us / 1000000.0
-                    percent = int((current_time / total_duration) * 100)
-                    percent = min(99, max(0, percent))
-                    set_progress(task_id, percent)
-                except Exception:
-                    pass
-
+    except Exception as e:
+        logger.error("Failed to start process: %s", e)
+        raise RuntimeError(f"Failed to start task process: {e}")
+        
+    if task_id:
+        tm.register_task(task_id, process)
+        
+    try:
+        if task_id and total_duration and total_duration > 0:
+            while True:
+                # Handle pause
+                while tm.is_task_paused(task_id):
+                    time.sleep(0.5)
+                    if tm.is_task_cancelled(task_id):
+                        raise RuntimeError("Task cancelled by user")
+                
+                # Check for cancellation
+                if tm.is_task_cancelled(task_id):
+                    raise RuntimeError("Task cancelled by user")
+                    
+                line = process.stdout.readline()
+                if not line:
+                    break
+                if line.startswith("out_time_us="):
+                    try:
+                        us = int(line.split("=")[1].strip())
+                        current_time = us / 1000000.0
+                        percent = int((current_time / total_duration) * 100)
+                        percent = min(99, max(0, percent))
+                        set_progress(task_id, percent)
+                    except Exception:
+                        pass
+        else:
+            # Simple wait loop with pause/cancel checks
+            while process.poll() is None:
+                while tm.is_task_paused(task_id):
+                    time.sleep(0.5)
+                    if tm.is_task_cancelled(task_id):
+                        raise RuntimeError("Task cancelled by user")
+                        
+                if tm.is_task_cancelled(task_id):
+                    raise RuntimeError("Task cancelled by user")
+                time.sleep(0.2)
+                
         process.wait(timeout=cfg.YTDLP_TIMEOUT)
         if process.returncode != 0:
-            stderr_content = process.stderr.read()
-            logger.error("FFmpeg error: %s", stderr_content)
-            raise RuntimeError(f"FFmpeg failed with code {process.returncode}: {stderr_content.strip()}")
+            stderr_content = process.stderr.read() if process.stderr else ""
+            if "cancelled" in str(stderr_content).lower() or tm.is_task_cancelled(task_id):
+                raise RuntimeError("Task cancelled by user")
+            logger.error("Process error: %s", stderr_content)
+            raise RuntimeError(f"Task process failed with code {process.returncode}: {stderr_content.strip()}")
+            
+        if task_id:
+            set_progress(task_id, 100)
+            
+    finally:
+        if task_id:
+            tm.unregister_task(task_id)
 
-        set_progress(task_id, 100)
 
-    except Exception as e:
-        logger.error("Error running FFmpeg with progress: %s", e)
-        raise
+def _run_ffmpeg(cmd: list) -> None:
+    """Run an FFmpeg command and raise RuntimeError on failure."""
+    _execute_subprocess_task(cmd)
+
+
+def _run_ffmpeg_with_progress(cmd: list, task_id: str, total_duration: float) -> None:
+    """Run FFmpeg command and parse output to update task_id progress."""
+    _execute_subprocess_task(cmd, task_id, total_duration)
 
 
 def _convert_to_gif(input_path: str, output_path: str, fps: int = 15, width: int = 480) -> str:
@@ -424,59 +464,346 @@ def _convert_to_gif(input_path: str, output_path: str, fps: int = 15, width: int
     return output_path
 
 
+_cached_encoders = None
+
+def get_available_encoders() -> set[str]:
+    global _cached_encoders
+    if _cached_encoders is not None:
+        return _cached_encoders
+    
+    _cached_encoders = set()
+    try:
+        ffmpeg = _ffmpeg_bin()
+        result = subprocess.run([ffmpeg, "-encoders"], capture_output=True, text=True, timeout=5)
+        out = result.stdout.lower()
+        if "nvenc" in out:
+            _cached_encoders.add("nvenc")
+        if "qsv" in out:
+            _cached_encoders.add("qsv")
+        if "amf" in out:
+            _cached_encoders.add("amf")
+            
+        for enc in ("libx264", "libx265", "libvpx-vp9", "libsvtav1", "libaom-av1",
+                    "h264_nvenc", "hevc_nvenc", "av1_nvenc",
+                    "h264_qsv", "hevc_qsv", "av1_qsv",
+                    "h264_amf", "hevc_amf", "av1_amf"):
+            if enc in out:
+                _cached_encoders.add(enc)
+    except Exception as e:
+        logger.error("Failed to detect encoders: %s", e)
+    return _cached_encoders
+
+
 def compress_video_file(input_path: str, output_path: str, level: str, task_id: str = None) -> str:
-    ffmpeg = _ffmpeg_bin()
+    from routes.settings import load_settings
+    settings = load_settings()
+    
+    preferred_gpu = settings.get("preferred_gpu_encoder", "auto")
+    preset = settings.get("compression_preset", "balanced")
+    
+    # Check target container and default codec
     target_ext = os.path.splitext(output_path)[1].lower()
-
-    if target_ext == '.webm':
-        crf_map = {
-            'low': '24',
-            'medium': '30',
-            'high': '36'
-        }
-        crf = crf_map.get(level, '30')
-        cmd = [
-            ffmpeg,
-            '-y',
-            '-i', input_path,
-            '-c:v', 'libvpx-vp9',
-            '-crf', crf,
-            '-b:v', '0',
-            '-c:a', 'libopus',
-            '-b:a', '128k' if level != 'high' else '96k',
-            '-loglevel', 'error',
-            output_path
-        ]
-    else:
-        crf_map = {
-            'low': '20',
-            'medium': '26',
-            'high': '32'
-        }
-        crf = crf_map.get(level, '26')
-        cmd = [
-            ffmpeg,
-            '-y',
-            '-i', input_path,
-            '-c:v', 'libx264',
-            '-preset', 'medium',
-            '-crf', crf,
-            '-c:a', 'aac',
-            '-b:a', '128k' if level != 'high' else '96k',
-            '-loglevel', 'error',
-            output_path
-        ]
-
-    logger.debug("FFmpeg video compress: %s", " ".join(cmd))
+    codec = settings.get("preferred_video_codec", "h264")
+    if target_ext == ".webm" and codec not in ("vp9", "av1"):
+        codec = "vp9"
+        
+    encoders = get_available_encoders()
+    
+    # Resolve preferred encoder
+    selected_hw = "cpu"
+    if preferred_gpu == "auto":
+        if "nvenc" in encoders:
+            selected_hw = "nvenc"
+        elif "qsv" in encoders:
+            selected_hw = "qsv"
+        elif "amf" in encoders:
+            selected_hw = "amf"
+    elif preferred_gpu in ("nvenc", "qsv", "amf") and preferred_gpu in encoders:
+        selected_hw = preferred_gpu
+        
+    # Map encoder & parameters
+    vcodec = "libx264"
+    friendly_enc = "CPU (x264)"
+    v_args = []
+    
+    algorithm_name = codec.upper()
     total_dur = probe_duration(input_path)
-    if task_id and total_dur:
-        _run_ffmpeg_with_progress(cmd, task_id, total_dur)
+    
+    if codec == "h264":
+        if selected_hw == "nvenc":
+            vcodec = "h264_nvenc"
+            friendly_enc = "NVENC"
+            if preset == "fast":
+                v_args = ["-preset", "p1", "-cq", "20"]
+            elif preset == "balanced":
+                v_args = ["-preset", "p4", "-cq", "23"]
+            elif preset == "max_compression":
+                v_args = ["-preset", "p7", "-cq", "28", "-multipass", "2pass-full"]
+            else: # archival_quality
+                v_args = ["-preset", "p5", "-cq", "16"]
+        elif selected_hw == "qsv":
+            vcodec = "h264_qsv"
+            friendly_enc = "Intel QSV"
+            if preset == "fast":
+                v_args = ["-preset", "veryfast", "-global_quality", "20"]
+            elif preset == "balanced":
+                v_args = ["-preset", "medium", "-global_quality", "23"]
+            elif preset == "max_compression":
+                v_args = ["-preset", "veryslow", "-global_quality", "28"]
+            else:
+                v_args = ["-preset", "slow", "-global_quality", "16"]
+        elif selected_hw == "amf":
+            vcodec = "h264_amf"
+            friendly_enc = "AMD AMF"
+            if preset == "fast":
+                v_args = ["-quality", "speed"]
+            elif preset == "balanced":
+                v_args = ["-quality", "balanced"]
+            elif preset == "max_compression":
+                v_args = ["-quality", "quality"]
+            else:
+                v_args = ["-quality", "quality"]
+        else: # CPU
+            vcodec = "libx264"
+            friendly_enc = "CPU (x264)"
+            if preset == "fast":
+                v_args = ["-preset", "veryfast", "-crf", "20"]
+            elif preset == "balanced":
+                v_args = ["-preset", "medium", "-crf", "23"]
+            elif preset == "max_compression":
+                v_args = ["-preset", "veryslow", "-crf", "26", "-me_method", "umh", "-subq", "10", "-aq-mode", "2"]
+            else:
+                v_args = ["-preset", "slow", "-crf", "16"]
+                
+    elif codec == "h265":
+        algorithm_name = "H.265"
+        if selected_hw == "nvenc":
+            vcodec = "hevc_nvenc"
+            friendly_enc = "NVENC"
+            if preset == "fast":
+                v_args = ["-preset", "p1", "-cq", "22"]
+            elif preset == "balanced":
+                v_args = ["-preset", "p4", "-cq", "25"]
+            elif preset == "max_compression":
+                v_args = ["-preset", "p7", "-cq", "30", "-multipass", "2pass-full"]
+            else:
+                v_args = ["-preset", "p5", "-cq", "18"]
+        elif selected_hw == "qsv":
+            vcodec = "hevc_qsv"
+            friendly_enc = "Intel QSV"
+            if preset == "fast":
+                v_args = ["-preset", "veryfast", "-global_quality", "22"]
+            elif preset == "balanced":
+                v_args = ["-preset", "medium", "-global_quality", "25"]
+            elif preset == "max_compression":
+                v_args = ["-preset", "veryslow", "-global_quality", "30"]
+            else:
+                v_args = ["-preset", "slow", "-global_quality", "18"]
+        elif selected_hw == "amf":
+            vcodec = "hevc_amf"
+            friendly_enc = "AMD AMF"
+            if preset == "fast":
+                v_args = ["-quality", "speed"]
+            elif preset == "balanced":
+                v_args = ["-quality", "balanced"]
+            elif preset == "max_compression":
+                v_args = ["-quality", "quality"]
+            else:
+                v_args = ["-quality", "quality"]
+        else:
+            vcodec = "libx265"
+            friendly_enc = "CPU (x265)"
+            if preset == "fast":
+                v_args = ["-preset", "veryfast", "-crf", "24"]
+            elif preset == "balanced":
+                v_args = ["-preset", "medium", "-crf", "26"]
+            elif preset == "max_compression":
+                v_args = ["-preset", "veryslow", "-crf", "28", "-x265-params", "aq-mode=2:b-intra=1"]
+            else:
+                v_args = ["-preset", "slow", "-crf", "18"]
+                
+    elif codec == "vp9":
+        algorithm_name = "VP9"
+        vcodec = "libvpx-vp9"
+        friendly_enc = "CPU (VP9)"
+        if preset == "fast":
+            v_args = ["-crf", "32", "-b:v", "1M", "-deadline", "good", "-cpu-used", "4"]
+        elif preset == "balanced":
+            v_args = ["-crf", "30", "-b:v", "0", "-deadline", "good", "-cpu-used", "2"]
+        elif preset == "max_compression":
+            v_args = ["-crf", "33", "-b:v", "0", "-deadline", "best", "-cpu-used", "0"]
+        else:
+            v_args = ["-crf", "18", "-b:v", "0", "-deadline", "good", "-cpu-used", "1"]
+            
+    elif codec == "av1":
+        algorithm_name = "AV1"
+        if selected_hw == "nvenc" and "av1_nvenc" in encoders:
+            vcodec = "av1_nvenc"
+            friendly_enc = "NVENC"
+            if preset == "fast":
+                v_args = ["-preset", "p1", "-cq", "24"]
+            elif preset == "balanced":
+                v_args = ["-preset", "p4", "-cq", "28"]
+            elif preset == "max_compression":
+                v_args = ["-preset", "p7", "-cq", "32", "-multipass", "2pass-full"]
+            else:
+                v_args = ["-preset", "p5", "-cq", "20"]
+        elif selected_hw == "qsv" and "av1_qsv" in encoders:
+            vcodec = "av1_qsv"
+            friendly_enc = "Intel QSV"
+            if preset == "fast":
+                v_args = ["-preset", "veryfast", "-global_quality", "24"]
+            elif preset == "balanced":
+                v_args = ["-preset", "medium", "-global_quality", "28"]
+            elif preset == "max_compression":
+                v_args = ["-preset", "veryslow", "-global_quality", "32"]
+            else:
+                v_args = ["-preset", "slow", "-global_quality", "20"]
+        elif selected_hw == "amf" and "av1_amf" in encoders:
+            vcodec = "av1_amf"
+            friendly_enc = "AMD AMF"
+            if preset == "fast":
+                v_args = ["-quality", "speed"]
+            elif preset == "balanced":
+                v_args = ["-quality", "balanced"]
+            elif preset == "max_compression":
+                v_args = ["-quality", "quality"]
+            else:
+                v_args = ["-quality", "quality"]
+        else:
+            if "libsvtav1" in encoders:
+                vcodec = "libsvtav1"
+                friendly_enc = "SVT-AV1"
+                if preset == "fast":
+                    v_args = ["-preset", "8", "-crf", "32"]
+                elif preset == "balanced":
+                    v_args = ["-preset", "5", "-crf", "28"]
+                elif preset == "max_compression":
+                    v_args = ["-preset", "2", "-crf", "30"]
+                else:
+                    v_args = ["-preset", "3", "-crf", "20"]
+            else:
+                vcodec = "libaom-av1"
+                friendly_enc = "libaom"
+                if preset == "fast":
+                    v_args = ["-cpu-used", "6", "-crf", "32"]
+                elif preset == "balanced":
+                    v_args = ["-cpu-used", "4", "-crf", "28"]
+                elif preset == "max_compression":
+                    v_args = ["-cpu-used", "1", "-deadline", "best", "-crf", "30"]
+                else:
+                    v_args = ["-cpu-used", "2", "-crf", "20"]
+                    
+    # Audio settings
+    audio_preset = settings.get("audio_quality", "high")
+    acodec = "aac"
+    a_args = []
+    
+    preferred_acodec = settings.get("preferred_audio_codec", "aac")
+    if preferred_acodec == "mp3":
+        acodec = "libmp3lame"
+        if audio_preset == "low":
+            a_args = ["-q:a", "6"]
+        elif audio_preset == "medium":
+            a_args = ["-q:a", "4"]
+        else:
+            a_args = ["-q:a", "2"]
+    elif preferred_acodec == "opus":
+        acodec = "libopus"
+        if audio_preset == "low":
+            a_args = ["-b:a", "64k", "-vbr", "on"]
+        elif audio_preset == "medium":
+            a_args = ["-b:a", "96k", "-vbr", "on"]
+        else:
+            a_args = ["-b:a", "128k", "-vbr", "on"]
+    elif preferred_acodec == "flac":
+        acodec = "flac"
+        if audio_preset == "low":
+            a_args = ["-compression_level", "1"]
+        elif audio_preset == "medium":
+            a_args = ["-compression_level", "5"]
+        else:
+            a_args = ["-compression_level", "8"]
     else:
-        _run_ffmpeg(cmd)
-
-    if not os.path.isfile(output_path):
-        raise RuntimeError("FFmpeg compression produced no output file.")
-
+        acodec = "aac"
+        if audio_preset == "low":
+            a_args = ["-b:a", "96k"]
+        elif audio_preset == "medium":
+            a_args = ["-q:a", "2"]
+        else:
+            a_args = ["-q:a", "1"]
+            
+    ffmpeg = _ffmpeg_bin()
+    
+    # 2-pass CPU max compression
+    is_cpu = selected_hw == "cpu"
+    if preset == "max_compression" and is_cpu and codec in ("h264", "h265", "vp9"):
+        logger.info("Running 2-pass compression for %s...", codec)
+        set_progress(task_id, 0, stage="Analyzing... (Pass 1/2)", encoder=friendly_enc, algorithm=algorithm_name)
+        
+        pass1_cmd = [
+            ffmpeg, "-y", "-i", input_path,
+            "-c:v", vcodec
+        ] + v_args + [
+            "-pass", "1", "-an", "-f", "null", "NUL" if sys.platform == "win32" else "/dev/null"
+        ]
+        
+        try:
+            _execute_subprocess_task(pass1_cmd, task_id, total_dur)
+        except Exception as e:
+            logger.error("Pass 1 of 2-pass failed: %s", e)
+            raise e
+            
+        set_progress(task_id, 50, stage="Encoding... (Pass 2/2)", encoder=friendly_enc, algorithm=algorithm_name)
+        
+        pass2_cmd = [
+            ffmpeg, "-y", "-i", input_path,
+            "-c:v", vcodec
+        ] + v_args + [
+            "-pass", "2",
+            "-c:a", acodec
+        ] + a_args + [
+            "-loglevel", "error",
+            output_path
+        ]
+        
+        try:
+            _execute_subprocess_task(pass2_cmd, task_id, total_dur)
+        except Exception as e:
+            logger.error("Pass 2 of 2-pass failed: %s", e)
+            raise e
+            
+        for f in os.listdir("."):
+            if f.startswith("ffmpeg2pass") or f.endswith(".log") or f.endswith(".log.mbtree"):
+                try:
+                    os.remove(f)
+                except Exception:
+                    pass
+    else:
+        stage_name = f"Using {friendly_enc}..." if "cpu" not in friendly_enc.lower() else f"Encoding {algorithm_name}..."
+        set_progress(task_id, 0, stage=stage_name, encoder=friendly_enc, algorithm=algorithm_name)
+        
+        cmd = [
+            ffmpeg, "-y", "-i", input_path,
+            "-c:v", vcodec
+        ] + v_args + [
+            "-c:a", acodec
+        ] + a_args + [
+            "-loglevel", "error",
+            output_path
+        ]
+        
+        _execute_subprocess_task(cmd, task_id, total_dur)
+        
+    if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+        raise RuntimeError("Compression produced empty or missing output file")
+        
+    orig_size = os.path.getsize(input_path) if os.path.exists(input_path) else 1
+    comp_size = os.path.getsize(output_path) if os.path.exists(output_path) else 1
+    ratio = round(orig_size / comp_size, 1)
+    ratio_str = f"{ratio}:1"
+    set_progress(task_id, 100, stage="Completed", ratio=ratio_str)
+    
     return output_path
 
 

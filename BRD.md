@@ -19,38 +19,33 @@ Key success metrics:
 
 ## 🛠️ 3. Functional Requirements (FR)
 
-### FR-1: Web Scraper & Asset Extractor
-*   **FR-1.1**: The system must parse a target URL and locate all embedded media assets (`<img>`, `<video>`, `<audio>`, inline SVGs, and link favicon references).
-*   **FR-1.2**: Scraped assets must be classified by type: `image`, `gif`, `svg`, `ico`, `video`, or `audio`.
-*   **FR-1.3**: The system must query metadata (dimensions for images/gifs, file size in bytes) where available without fully downloading the asset to the client first.
+### FR-1: Web Scraper
+*   **FR-1.1**: The system must extract all media elements (images, videos, audio, SVGs, and favicons) from a target website URL.
+*   **FR-1.2**: Scraped assets must be grouped clearly by type: images, gifs, vectors, videos, or audio.
+*   **FR-1.3**: The system must display metadata like image size and dimensions without downloading the file to the user's browser first.
 
-### FR-2: Asynchronous Video & Audio Downloader
-*   **FR-2.1**: The system must download video/audio from YouTube and other supported websites in the background using `yt-dlp`.
-*   **FR-2.2**: The system must allow users to select target quality levels (e.g., 1080p, 720p, audio-only, or thumbnail-only).
-*   **FR-2.3**: The downloader must support live action triggers: `pause`, `resume`, and `stop` (abort execution).
-*   **FR-2.4**: The system must limit download speed based on settings presets (`low`, `medium`, `high`, `max`) or custom settings to prevent service blocking or network congestion.
+### FR-2: Media Downloader
+*   **FR-2.1**: The system must download video and audio from supported sites in the background.
+*   **FR-2.2**: The system must let users choose quality options (e.g., 1080p video, audio-only, or thumbnail image).
+*   **FR-2.3**: The downloader must allow users to pause, resume, or cancel active downloads.
+*   **FR-2.4**: The system must allow users to limit download speed to save bandwidth.
 
-### FR-3: Formatted File Converter
-*   **FR-3.1**: The system must allow file uploads and transcode them locally on the server (no external conversion APIs).
-*   **FR-3.2**: Image conversion must support JPG, PNG, WebP, BMP, GIF, ICO, and AVIF. Transparency must be flattened automatically when converting to formats that lack alpha-channels (e.g., JPG).
-*   **FR-3.3**: Document conversion must support converting Word Documents (.docx) to PDF, and PDF documents to Word.
-*   **FR-3.4**: When MS Word or system COM libraries are missing on the target host, document conversion must fall back to a Python-native parser and ReportLab builder to output PDF text layout dynamically.
+### FR-3: File Converter
+*   **FR-3.1**: The system must convert files locally on the machine without using external services.
+*   **FR-3.2**: Image conversion must support changing formats between JPG, PNG, WebP, BMP, GIF, ICO, and AVIF.
+*   **FR-3.3**: Document conversion must support converting Word documents (.docx) to PDF, and PDF documents back to Word (.docx).
+*   **FR-3.4**: If the system lacks MS Word tools, it must fall back to a built-in PDF generator to lay out document text.
 
-### FR-4: Profile Settings Configuration
-*   **FR-4.1**: Users must be able to adjust app configurations such as UI theme, max concurrent downloads, rate limits, and output folder locations.
-*   **FR-4.2**: Settings must be persisted to a local JSON file (`user_settings.json`) and merge defaults automatically for missing parameters.
+### FR-4: App Settings
+*   **FR-4.1**: Users must be able to change settings like the dark/light theme, download speeds, and folder paths.
+*   **FR-4.2**: Settings must be saved automatically to a local configuration file.
 
-### FR-5: Lossless Media Compressor
-*   **FR-5.1**: The system must support compressing images (JPG, PNG, WebP) and videos (MP4, MKV, AVI, MOV, WEBM) via a local Flask endpoint `/api/compress`.
-*   **FR-5.2**: The system must allow users to choose between compression intensity levels: `low` (preserves visual fidelity), `medium` (balanced quality and size reduction), and `high` (maximum size reduction).
-*   **FR-5.3**: For image compression, the system must apply format-specific optimizations:
-    *   *JPG/WebP*: Apply custom quality factor constraints (85, 70, or 55) based on level.
-    *   *PNG*: Apply color quantization (downsampling to 128 or 256 colors) or specify max compression level (compress_level=9).
-*   **FR-5.4**: For video compression, the system must invoke FFmpeg and adjust the target Constant Rate Factor (CRF) and audio bitrate:
-    *   *Standard container files (MP4, etc.)*: CRF 20 (low), 26 (medium), or 32 (high) using `libx264`.
-    *   *WebM files*: CRF 24 (low), 30 (medium), or 36 (high) using `libvpx-vp9`.
-    *   *Audio streams*: Cap audio bitrate at 128k (low/medium) or 96k (high).
-*   **FR-5.5**: The system must track compression progress and expose it in real-time via `/api/compress/progress/<task_id>`.
+### FR-5: File Compressor
+*   **FR-5.1**: The system must support compressing images (JPG, PNG, WebP) and videos (MP4, MKV, AVI, MOV, WEBM) locally.
+*   **FR-5.2**: The system must offer simple compression levels: Low (best quality), Medium (balanced), and High (smallest size).
+*   **FR-5.3**: For image compression, it must apply format-specific optimizations automatically.
+*   **FR-5.4**: For video compression, it must adjust encoding quality and audio bitrate to shrink the file size.
+*   **FR-5.5**: The system must show real-time progress bars for compression tasks.
 
 ---
 

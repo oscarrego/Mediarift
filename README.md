@@ -28,17 +28,14 @@ It runs in two modes:
 
 ## ⚡ Key Features
 
-*   **Asynchronous Downloader**: Download high-quality video (up to 4K), audio streams (MP3/M4A), or thumbnails asynchronously. Features pause, resume, cancel, and download history tracking.
-*   **Speed & Rate Control**: Set bandwidth limits or trigger **Snail Mode** (throttling to 50 KB/s) to mimic slow connections or avoid platform rate-limits.
-*   **Web Asset Scraper**: Point MediaRift at any webpage to scrape and catalog all embedded media assets (JPG, PNG, WebP, GIF, SVG, ICO, MP4, MP3, etc.).
-*   **Lossless File Converter**:
-    *   **Images**: Flatten transparency and re-encode (JPG, PNG, WebP, BMP, GIF, ICO, AVIF, HEIC).
-    *   **Audio/Video**: Transcode container formats and codecs via FFmpeg.
-    *   **Documents**: Bidirectional PDF-to-Word (DOCX) and Word-to-PDF conversion (via docx2pdf / pdf2docx) with a pure Python ReportLab fallback layout engine.
-*   **Media Compressor**:
-    *   **Images**: Optimize and reduce image file sizes (JPG, PNG, WebP) utilizing quantization thresholds and quality presets.
-    *   **Videos**: Reduce video file size (MP4, MKV, AVI, MOV, WEBM) using FFmpeg via adjustable CRF (Constant Rate Factor) settings and audio bitrate constraints.
-    *   **Visual Savings Dashboard**: Track active compression jobs in real-time with progress bars and instant metrics highlighting bytes saved and percentage reductions.
+*   **Video & Audio Downloader**: Download high-quality videos or extract audio from YouTube and 1000+ websites. You can pause, resume, and limit download speeds.
+*   **Web Scraper**: Extract all images, videos, audio, and icon links from any webpage instantly.
+*   **File Converter**: Convert files locally on your computer:
+    *   **Images**: JPG, PNG, WebP, GIF, BMP, ICO, AVIF, etc.
+    *   **Audio/Video**: Convert between popular formats.
+    *   **Documents**: Convert Word (.docx) to PDF, and PDF to Word.
+*   **File Compressor**: Shrink images and videos using simple presets (Low, Medium, High) to save disk space.
+*   **Privacy First**: No trackers, no ads, and no cloud uploads. All files are processed locally on your machine or private server.
 
 ---
 
@@ -47,84 +44,33 @@ It runs in two modes:
 MediaRift utilizes a decoupled client-server architecture that can also be compiled as a single binary using PyInstaller.
 
 ```mermaid
-graph TB
-    subgraph Client ["Client Layer (React Frontend / PyWebView Desktop)"]
-        UI["Web UI Components (App.jsx)"]
-        MC["Media Compressor UI (MediaCompressor.jsx)"]
-        FC["File Converter UI (FileConverter.jsx)"]
-        DL["Downloader UI (DownloadTable.jsx)"]
-        API["Axios / Fetch API Client (services/api.js)"]
-
-        UI --> MC
-        UI --> FC
-        UI --> DL
-        MC --> API
-        FC --> API
-        DL --> API
+graph TD
+    subgraph Client [User Client Interface]
+        ReactUI[React Web App]
+        DesktopUI[Desktop Application]
     end
 
-    subgraph Backend ["Backend Layer (Flask API Server)"]
-        app["Flask Gateway (app.py)"]
-        
-        subgraph Routes ["API Endpoints (routes/)"]
-            r_info["/api/info"]
-            r_dl["/api/download(s)"]
-            r_conv["/api/convert"]
-            r_comp["/api/compress"]
-            r_fetch["/api/media-fetch"]
-        end
-
-        subgraph Services ["Service Orchestrators (services/)"]
-            dl_reg["Download Registry<br>(download_registry.py)"]
-            yt_svc["yt-dlp Wrapper<br>(youtube.py)"]
-            ff_svc["FFmpeg Service<br>(ffmpeg.py)"]
-            scrap_svc["BeautifulSoup Scraper<br>(media_fetch.py)"]
-        end
+    subgraph Backend [Backend Server]
+        Flask[Flask API Server]
     end
 
-    subgraph Engines ["Core Processing Engines"]
-        YTDLP["yt-dlp CLI"]
-        FFMPEG["FFmpeg / FFprobe CLI"]
-        Pillow["Pillow Engine (Python)"]
-        DocConv["docx2pdf / pdf2docx"]
-        BS4["BeautifulSoup4"]
+    subgraph Engines [Core Processing Tools]
+        YTDLP[yt-dlp: Media Downloader]
+        FFMPEG[FFmpeg: Audio/Video Tool]
+        Pillow[Pillow: Image Processor]
+        DocConv[docx2pdf/pdf2docx: Document Converter]
     end
 
-    subgraph Storage ["Storage / State Layer"]
-        InMem["In-Memory State<br>(Download Tasks Registry)"]
-        settings["user_settings.json"]
-        Disk["Local File System / Render Persistent Disk"]
+    subgraph Storage [Storage / State]
+        Disk[Local Disk / Saved Files]
     end
 
-    %% Client to Backend routing
-    API -->|HTTP Requests| app
-    app --> r_info
-    app --> r_dl
-    app --> r_conv
-    app --> r_comp
-    app --> r_fetch
-
-    %% Backend Routes to Services
-    r_info --> yt_svc
-    r_dl --> dl_reg
-    dl_reg -->|Spawns Worker Threads| yt_svc
-    r_conv --> ff_svc
-    r_comp --> ff_svc
-    r_fetch --> scrap_svc
-
-    %% Services to Engines
-    yt_svc -->|Executes| YTDLP
-    ff_svc -->|Executes Subprocesses| FFMPEG
-    ff_svc -->|Invokes| Pillow
-    ff_svc -->|Invokes| DocConv
-    scrap_svc -->|Parses HTML| BS4
-
-    %% Services to Storage / State
-    dl_reg -->|Reads / Writes| InMem
-    r_dl -->|Queries / Controls| InMem
-    yt_svc -->|Saves Downloads| Disk
-    ff_svc -->|Read / Write Temp Files| Disk
-    app -->|Read / Write Settings| settings
+    Client -->|API Requests| Flask
+    Flask -->|Runs| YTDLP
+    Flask -->|Runs| FFMPEG
+    Flask -->|Uses| Pillow
+    Flask -->|Uses| DocConv
+    Flask -->|Saves / Reads| Disk
 ```
 
 ### Key Architectural Details:

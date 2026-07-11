@@ -67,7 +67,14 @@ export default function StatusBar({ downloads, settings, onSettingsChange }) {
   const toggleSnail = () => onSettingsChange({ snail_mode: !snailOn })
 
   const setPreset = (key) =>
-    onSettingsChange({ speed_preset: key, snail_mode: false, speed_limit_kbps: 0 })
+    onSettingsChange({
+      speed_preset: key,
+      snail_mode: false,
+      speed_limit_kbps: 0,
+      max_concurrent_downloads: settings?.[`preset_${key}_max_downloads`] !== undefined
+        ? settings[`preset_${key}_max_downloads`]
+        : (key === 'low' ? 2 : key === 'medium' ? 3 : key === 'high' ? 4 : 3)
+    })
 
   return (
     <div className={`${styles.statusbar} mr-statusbar`} role="status" aria-label="Download status">

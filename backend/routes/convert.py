@@ -20,7 +20,7 @@ from PIL import Image
 from config import ActiveConfig as cfg
 from services.ffmpeg import convert_media
 
-logger = logging.getLogger("ytshort.routes.convert")
+logger = logging.getLogger("mediarift.routes.convert")
 
 convert_bp = Blueprint("convert", __name__)
 
@@ -254,7 +254,28 @@ def convert_file():
             logger.warning("Failed to clean up temp files: %s", clean_err)
 
 
+@convert_bp.post("/convert/<taskId>/pause")
+def pause_convert(taskId):
+    import services.task_manager as tm
+    ok = tm.suspend_task(taskId)
+    return jsonify({"success": ok}), 200
+
+
+@convert_bp.post("/convert/<taskId>/resume")
+def resume_convert(taskId):
+    import services.task_manager as tm
+    ok = tm.resume_task(taskId)
+    return jsonify({"success": ok}), 200
+
+
+@convert_bp.post("/convert/<taskId>/cancel")
+def cancel_convert(taskId):
+    import services.task_manager as tm
+    ok = tm.cancel_task(taskId)
+    return jsonify({"success": ok}), 200
+
+
 @convert_bp.get("/convert/progress/<task_id>")
 def convert_progress(task_id):
-    from services.ffmpeg import get_progress
-    return jsonify({"progress": get_progress(task_id)})
+    from services.ffmpeg import get_progress_data
+    return jsonify(get_progress_data(task_id))

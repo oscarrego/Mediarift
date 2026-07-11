@@ -5,7 +5,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react'
 import styles from './DownloadTable.module.css'
-import { pauseDownload, resumeDownload, stopDownload, deleteDownload, openFolder } from '../services/api'
+import { pauseDownload, resumeDownload, restartDownload, stopDownload, deleteDownload, openFolder } from '../services/api'
 
 // ── Icons ───────────────────────────────────────────────────────────────────
 
@@ -66,6 +66,8 @@ function fmtBytes(b) {
   return b + ' B'
 }
 
+// ── Format helpers ────────────────────────────────────────────────────────────
+
 function fmtSpeed(bps) {
   if (!bps) return '0 B/s'
   if (bps >= 1e6) return (bps / 1e6).toFixed(1) + ' MB/s'
@@ -82,8 +84,11 @@ function fmtDate(iso) {
   } catch { return iso.slice(0, 10) }
 }
 
-function stateLabel(state) {
-  switch (state) {
+function stateLabel(entry) {
+  if (entry.state === 'retrying') {
+    return `Retrying (${entry.retry_count}/${entry.max_retries}) in ${entry.retry_countdown ?? 0}s...`
+  }
+  switch (entry.state) {
     case 'queued':      return 'Queued'
     case 'fetching':    return 'Fetching…'
     case 'downloading': return 'Downloading'
@@ -91,7 +96,9 @@ function stateLabel(state) {
     case 'completed':   return 'Completed'
     case 'error':       return 'Error'
     case 'stopped':     return 'Stopped'
-    default:            return state
+    case 'Interrupted': return 'Interrupted'
+    case 'Resuming...': return 'Resuming...'
+    default:            return entry.state
   }
 }
 
@@ -119,10 +126,10 @@ function DownloadRow({ entry, isSelected, isChecked, onSelect, onCheck, onDelete
     try { await fn() } finally { setActionPending(false); onRefresh?.() }
   }
 
-  // Single toggle button: if downloading → pause; if paused/stopped/error → resume
+  // Single toggle button: if downloading/retrying/resuming → pause; if paused/stopped/error → resume
   const handlePlayPause = (e) => {
     e.stopPropagation()
-    if (entry.state === 'downloading') {
+    if (entry.state === 'downloading' || entry.state === 'retrying' || entry.state === 'Resuming...') {
       wrap(() => pauseDownload(entry.id))
     } else if (entry.state === 'paused' || entry.state === 'stopped' || entry.state === 'error') {
       wrap(() => resumeDownload(entry.id))
@@ -136,8 +143,10 @@ function DownloadRow({ entry, isSelected, isChecked, onSelect, onCheck, onDelete
     onDelete(entry.id)
   }) }
 
-  const isActive = entry.state === 'downloading' || entry.state === 'paused'
-  const canPlayPause = entry.state === 'downloading' || entry.state === 'paused' || entry.state === 'stopped' || entry.state === 'error'
+  const handleRestart = (e) => { e.stopPropagation(); wrap(() => restartDownload(entry.id)) }
+
+  const isActive = entry.state === 'downloading' || entry.state === 'paused' || entry.state === 'retrying' || entry.state === 'Resuming...'
+  const canPlayPause = entry.state === 'downloading' || entry.state === 'paused' || entry.state === 'stopped' || entry.state === 'error' || entry.state === 'retrying' || entry.state === 'Resuming...'
   const canStop = isActive || entry.state === 'queued' || entry.state === 'fetching'
   const isCompleted = entry.state === 'completed'
   const isError = entry.state === 'error'
@@ -150,10 +159,13 @@ function DownloadRow({ entry, isSelected, isChecked, onSelect, onCheck, onDelete
     stopped:     styles.stateStopped,
     queued:      styles.stateQueued,
     fetching:    styles.stateFetching,
+    retrying:    styles.stateRetrying,
+    "Resuming...": styles.stateResuming,
+    "Interrupted": styles.stateInterrupted,
   }[entry.state] || ''
 
   // Play/pause button appearance
-  const isPlaying = entry.state === 'downloading'
+  const isPlaying = entry.state === 'downloading' || entry.state === 'retrying' || entry.state === 'Resuming...'
 
   return (
     <tr
@@ -212,11 +224,11 @@ function DownloadRow({ entry, isSelected, isChecked, onSelect, onCheck, onDelete
       {/* Status + progress */}
       <td className={`${styles.colStatus} mr-cell mr-col-status`}>
         <div className={styles.statusCell}>
-          <span className={`${styles.stateText} ${stateClass}`}>{stateLabel(entry.state)}</span>
+          <span className={`${styles.stateText} ${stateClass}`}>{stateLabel(entry)}</span>
           {isActive && (
             <div className={styles.progressBarWrap}>
               <div
-                className={`${styles.progressBar} ${entry.state === 'paused' ? styles.progressBarPaused : ''}`}
+                className={`${styles.progressBar} ${entry.state === 'paused' ? styles.progressBarPaused : ''} ${entry.state === 'retrying' ? styles.progressBarPaused : ''}`}
                 style={{ width: `${entry.percent || 0}%` }}
               />
             </div>
@@ -240,9 +252,29 @@ function DownloadRow({ entry, isSelected, isChecked, onSelect, onCheck, onDelete
       {/* Added */}
       <td className={`${styles.colDate} mr-cell mr-col-date`}>{fmtDate(entry.added_at)}</td>
 
-      {/* Actions — open-folder (completed only) + delete */}
+      {/* Actions — open-folder (completed only) + resume/restart/delete */}
       <td className={`${styles.colActions} mr-cell mr-col-actions`} onClick={e => e.stopPropagation()}>
         <div className={styles.actions}>
+          {entry.state === 'Interrupted' && (
+            <>
+              <button
+                className={`${styles.actionBtn} ${styles.actionBtnResume}`}
+                onClick={e => { e.stopPropagation(); wrap(() => resumeDownload(entry.id)) }}
+                title="Resume Download"
+                id={`action-resume-interrupted-${entry.id}`}
+              >
+                ▶
+              </button>
+              <button
+                className={`${styles.actionBtn} ${styles.actionBtnRestart}`}
+                onClick={handleRestart}
+                title="Restart Download"
+                id={`action-restart-interrupted-${entry.id}`}
+              >
+                ↻
+              </button>
+            </>
+          )}
           {isCompleted && (
             <button
               className={`${styles.actionBtn} ${styles.actionBtnFolder}`}

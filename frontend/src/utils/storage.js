@@ -3,7 +3,7 @@
  * Typed localStorage wrapper with JSON serialization and safe fallbacks.
  */
 
-const PREFIX = 'ytshort_'
+const PREFIX = 'mediarift_'
 
 export function storageGet(key, defaultValue = null) {
   try {
