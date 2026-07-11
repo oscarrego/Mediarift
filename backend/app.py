@@ -16,6 +16,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger("ytshort")
 
+# Initialize database (creates schemas, runs migrations, recovers unfinished downloads)
+import database
+database.init_db()
+
 
 def create_app(config_class: type = Config) -> Flask:
     """Application factory – create and configure the Flask app."""

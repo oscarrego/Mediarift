@@ -421,6 +421,29 @@ def media_fetch():
 
     try:
         assets = scrape_media(url)
+        
+        # Save scrape history to database
+        import uuid
+        import datetime
+        import database
+        
+        media_count = len(assets)
+        image_count = sum(1 for a in assets if a.get('type') in ('image', 'gif', 'svg'))
+        video_count = sum(1 for a in assets if a.get('type') == 'video')
+        audio_count = sum(1 for a in assets if a.get('type') == 'audio')
+        favicon_count = sum(1 for a in assets if a.get('type') == 'ico')
+        
+        database.save_db_media_scrape_async({
+            "id": str(uuid.uuid4()),
+            "website_url": url,
+            "media_count": media_count,
+            "image_count": image_count,
+            "video_count": video_count,
+            "audio_count": audio_count,
+            "favicon_count": favicon_count,
+            "scanned_at": datetime.datetime.now().isoformat(timespec="seconds")
+        })
+        
         if not assets:
             return jsonify({
                 'success': True,

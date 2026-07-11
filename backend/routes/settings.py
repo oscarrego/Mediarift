@@ -49,28 +49,24 @@ def _settings_file() -> Path:
 
 
 def load_settings() -> dict:
-    """Load settings from disk, falling back to defaults for any missing keys."""
-    path = _settings_file()
-    if path.is_file():
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                saved = json.load(f)
-            merged = {**DEFAULT_SETTINGS, **saved}
-            return merged
-        except Exception as exc:
-            logger.warning("Failed to load settings from %s: %s", path, exc)
+    """Load settings from database, falling back to defaults."""
+    import database
+    try:
+        return database.load_db_settings()
+    except Exception as exc:
+        logger.warning("Failed to load settings from DB: %s", exc)
     return dict(DEFAULT_SETTINGS)
 
 
 def save_settings(data: dict) -> dict:
-    """Merge data into current settings and persist to disk. Returns merged settings."""
-    current = load_settings()
-    current.update({k: v for k, v in data.items() if k in DEFAULT_SETTINGS})
-    path = _settings_file()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(current, f, indent=2)
-    return current
+    """Merge data into current settings and persist to database. Returns merged settings."""
+    import database
+    try:
+        return database.save_db_settings(data)
+    except Exception as exc:
+        logger.error("Failed to save settings to DB: %s", exc)
+        raise exc
+
 
 
 def get_effective_speed_kbps(settings: dict | None = None) -> int:

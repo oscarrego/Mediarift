@@ -1,0 +1,25 @@
+[
+  {
+    "id": "0547ac10dde5",
+    "url": "https://youtu.be/prG9xFkvlNg?si=-q97q2uKylJDiJyu",
+    "title": "I Tried Designing My FIRST Linux UI",
+    "platform": "youtube",
+    "download_type": "video",
+    "quality_label": "720p",
+    "format_id": "298",
+    "thumbnail": "https://i.ytimg.com/vi/prG9xFkvlNg/maxresdefault.jpg",
+    "state": "completed",
+    "percent": 100,
+    "downloaded_bytes": 77372648,
+    "total_bytes": 77372648,
+    "speed_bps": 0,
+    "eta_seconds": 0,
+    "filename": "I Tried Designing My FIRST Linux UI.mp4",
+    "filepath": "C:\\Users\\oscar\\Desktop\\MediaRift\\temp\\083cdcba6a5b4a4b91a3ab85fba1739a\\I Tried Designing My FIRST Linux UI.mp4",
+    "mime": "video/mp4",
+    "error": "",
+    "added_at": "2026-07-11T02:29:22",
+    "started_at": "2026-07-11T02:29:24",
+    "completed_at": "2026-07-11T02:29:51"
+  }
+]

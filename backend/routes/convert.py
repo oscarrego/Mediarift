@@ -149,6 +149,10 @@ def convert_file():
     input_path = os.path.join(cfg.TEMP_DIR, f"{unique_id}_in{from_ext}")
     output_path = os.path.join(cfg.TEMP_DIR, f"{unique_id}_out{to_ext}")
     
+    import datetime
+    created_at = datetime.datetime.now().isoformat(timespec="seconds")
+    conv_id = task_id or str(uuid.uuid4())
+    
     try:
         file.save(input_path)
         
@@ -195,6 +199,20 @@ def convert_file():
             
         download_name = f"{name_part}{to_ext}"
         
+        import database
+        database.save_db_conversion_async({
+            "id": conv_id,
+            "original_filename": orig_filename,
+            "output_filename": download_name,
+            "source_format": from_ext.lstrip('.'),
+            "target_format": to_ext.lstrip('.'),
+            "output_path": output_path,
+            "status": "completed",
+            "error": "",
+            "created_at": created_at,
+            "completed_at": datetime.datetime.now().isoformat(timespec="seconds")
+        })
+        
         import io
         with open(output_path, 'rb') as f:
             file_data = io.BytesIO(f.read())
@@ -208,6 +226,22 @@ def convert_file():
         
     except Exception as err:
         logger.exception("Conversion failed: %s", err)
+        try:
+            import database
+            database.save_db_conversion_async({
+                "id": conv_id,
+                "original_filename": orig_filename,
+                "output_filename": f"{name_part}{to_ext}",
+                "source_format": from_ext.lstrip('.'),
+                "target_format": to_ext.lstrip('.'),
+                "output_path": output_path,
+                "status": "error",
+                "error": str(err),
+                "created_at": created_at,
+                "completed_at": datetime.datetime.now().isoformat(timespec="seconds")
+            })
+        except Exception:
+            pass
         return jsonify({"error": f"Conversion failed: {str(err)}", "code": "CONVERSION_ERROR"}), 500
         
     finally:

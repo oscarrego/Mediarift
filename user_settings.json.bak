@@ -1,0 +1,19 @@
+{
+  "theme": "dark",
+  "speed_preset": "high",
+  "speed_limit_kbps": 0,
+  "max_concurrent_downloads": 2,
+  "snail_mode": false,
+  "snail_speed_kbps": 50,
+  "download_folder": "",
+  "launch_at_startup": false,
+  "auto_remove_on_delete": true,
+  "auto_remove_deleted": true,
+  "auto_remove_completed": false,
+  "auto_retry_failed": false,
+  "font_size": 17,
+  "window_width": 1280,
+  "window_height": 720,
+  "window_x": null,
+  "window_y": null
+}

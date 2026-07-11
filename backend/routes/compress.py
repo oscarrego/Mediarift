@@ -79,6 +79,10 @@ def compress_file():
     input_path = os.path.join(cfg.TEMP_DIR, f"{unique_id}_in{from_ext}")
     output_path = os.path.join(cfg.TEMP_DIR, f"{unique_id}_out{from_ext}")
 
+    import datetime
+    created_at = datetime.datetime.now().isoformat(timespec="seconds")
+    comp_id = task_id or unique_id
+    
     try:
         file.save(input_path)
 
@@ -99,6 +103,27 @@ def compress_file():
 
         download_name = f"{name_part}_compressed{from_ext}"
 
+        orig_size = os.path.getsize(input_path) if os.path.exists(input_path) else 0
+        comp_size = os.path.getsize(output_path) if os.path.exists(output_path) else 0
+        saved_bytes = orig_size - comp_size
+        saved_pct = (saved_bytes / orig_size * 100.0) if orig_size > 0 else 0.0
+
+        import database
+        database.save_db_compression_async({
+            "id": comp_id,
+            "original_filename": orig_filename,
+            "output_filename": download_name,
+            "compression_level": level,
+            "original_size": orig_size,
+            "compressed_size": comp_size,
+            "saved_bytes": saved_bytes,
+            "saved_percent": saved_pct,
+            "output_path": output_path,
+            "status": "completed",
+            "created_at": created_at,
+            "completed_at": datetime.datetime.now().isoformat(timespec="seconds")
+        })
+
         import io
         with open(output_path, 'rb') as f:
             file_data = io.BytesIO(f.read())
@@ -112,6 +137,25 @@ def compress_file():
 
     except Exception as err:
         logger.exception("Compression failed: %s", err)
+        try:
+            orig_size = os.path.getsize(input_path) if os.path.exists(input_path) else 0
+            import database
+            database.save_db_compression_async({
+                "id": comp_id,
+                "original_filename": orig_filename,
+                "output_filename": f"{name_part}_compressed{from_ext}",
+                "compression_level": level,
+                "original_size": orig_size,
+                "compressed_size": 0,
+                "saved_bytes": 0,
+                "saved_percent": 0.0,
+                "output_path": output_path,
+                "status": "error",
+                "created_at": created_at,
+                "completed_at": datetime.datetime.now().isoformat(timespec="seconds")
+            })
+        except Exception:
+            pass
         return jsonify({"error": f"Compression failed: {str(err)}", "code": "COMPRESSION_ERROR"}), 500
 
     finally:

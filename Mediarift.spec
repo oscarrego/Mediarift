@@ -4,7 +4,7 @@
 a = Analysis(
     ['backend\\app.py'],
     pathex=[],
-    binaries=[('bin/ffmpeg.exe', '.'), ('bin/ffprobe.exe', '.')],
+    binaries=[],
     datas=[('frontend/dist', 'frontend/dist')],
     hiddenimports=[],
     hookspath=[],

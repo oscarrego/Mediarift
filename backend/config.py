@@ -37,13 +37,27 @@ class Config:
     _bundled_ffmpeg = ""
     _bundled_ffprobe = ""
     if getattr(sys, 'frozen', False):
-        _base_path = sys._MEIPASS
-        _f_path = os.path.join(_base_path, "ffmpeg.exe")
-        _p_path = os.path.join(_base_path, "ffprobe.exe")
-        if os.path.isfile(_f_path):
-            _bundled_ffmpeg = _f_path
-        if os.path.isfile(_p_path):
-            _bundled_ffprobe = _p_path
+        # 1. Look in the directory of the executable
+        _exe_dir = os.path.dirname(sys.executable)
+        _f_path_exe = os.path.join(_exe_dir, "ffmpeg.exe")
+        _p_path_exe = os.path.join(_exe_dir, "ffprobe.exe")
+        
+        if os.path.isfile(_f_path_exe):
+            _bundled_ffmpeg = _f_path_exe
+        else:
+            # 2. Fall back to sys._MEIPASS (embedded in bundle)
+            _base_path = sys._MEIPASS
+            _f_path = os.path.join(_base_path, "ffmpeg.exe")
+            if os.path.isfile(_f_path):
+                _bundled_ffmpeg = _f_path
+                
+        if os.path.isfile(_p_path_exe):
+            _bundled_ffprobe = _p_path_exe
+        else:
+            _base_path = sys._MEIPASS
+            _p_path = os.path.join(_base_path, "ffprobe.exe")
+            if os.path.isfile(_p_path):
+                _bundled_ffprobe = _p_path
 
     FFMPEG_PATH: str = os.getenv("FFMPEG_PATH", _bundled_ffmpeg)
     FFPROBE_PATH: str = os.getenv("FFPROBE_PATH", _bundled_ffprobe)
